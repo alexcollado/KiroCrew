@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from aiohttp import web
 
+from kiro_crew.dashboard.state_parts import refresh_coalesce as _refresh_coalesce
 from kiro_crew.dashboard.state_parts.dashboard_services import _persistence_for, _websocket_for
 from kiro_crew.dashboard.state_parts.sidebar_stores import _safe_folder_tree
 from kiro_crew.dashboard.state_parts.slots_frame import (
@@ -921,9 +922,23 @@ def push_refresh(self: DashboardState, *kinds: str) -> None:
     client guessing on a timer.
 
     Supported kinds: ``crons``, ``lessons``, ``agents``, ``history``,
-    ``taskrunner``.
+    ``turn_end``, ``taskrunner``.
+
+    A lone ``turn_end`` goes through ``refresh_coalesce``, at most one frame per window.
     """
+    if kinds == (_refresh_coalesce.TURN_END_KIND,):
+        _refresh_coalesce.coalescer_for(self).push()
+        return
     self._broadcast({"_type": "refresh", "kinds": ",".join(kinds)})
+
+
+def push_listing_refresh(self: DashboardState) -> None:
+    """Push a coalesced ``history`` refresh: one frame per window however many tabs open.
+
+    A bulk creator opens slots one at a time, and each tab answers a ``history``
+    frame by re-reading the Older Sessions listing.
+    """
+    _refresh_coalesce.coalescer_for(self, _refresh_coalesce.HISTORY_KIND).push()
 
 
 def push_update_progress(self: DashboardState, step: str, detail: str = "") -> None:
@@ -1200,4 +1215,8 @@ def broadcast_ws_subagent_subscribers(self: DashboardState, msg_type: str, data:
 
 
 async def close_all_ws(self: DashboardState) -> None:
+    # Send any pending coalesced refresh frame before the sockets close.
+    for coalescer in (self._refresh_coalescer, self._history_coalescer):
+        if coalescer is not None:
+            coalescer.shutdown()
     await _websocket_for(self).close_all_ws()

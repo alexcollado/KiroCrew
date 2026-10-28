@@ -17,6 +17,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import threading
 from dataclasses import dataclass
 
 from aiohttp import web
@@ -621,6 +622,33 @@ def _maybe_consolidate(state, slot) -> None:
         )
 
 
+# Guards ``_published_slot_keys`` and the ``_slots`` read each writer pairs with it: the
+# sync compares and stores (on or off the loop), the listing narrows.
+_PUBLISHED_SLOT_KEYS_LOCK = threading.Lock()
+
+
+def _published_keys_of(state: "DashboardState") -> frozenset[str]:
+    published: object = getattr(state, "_published_slot_keys", frozenset())
+    return published if isinstance(published, frozenset) else frozenset()
+
+
+def listing_slot_snapshot(state: "DashboardState") -> list[_ChatSlot]:
+    """The open slots the Older Sessions listing filters with, read under the publish lock.
+
+    Every published key no slot in the snapshot holds leaves ``_published_slot_keys``:
+    the listing is about to show that session as a row, so the next sync that finds
+    its slot open counts it as gained and pushes ``history``. A resume or an import
+    takes its slot out of ``_slots`` for a finalization tail after the first sync
+    published it; a listing served in that tail is the case this covers.
+    """
+    with _PUBLISHED_SLOT_KEYS_LOCK:
+        slots = list(state._slots.values())
+        published = _published_keys_of(state)
+        if published:
+            state._published_slot_keys = published & {effective_session_key(s) for s in slots}
+    return slots
+
+
 def _sync_dashboard_slots(state: "DashboardState") -> None:
     """Publish the open slots' session keys to SessionManager and the surface registry.
 
@@ -629,6 +657,15 @@ def _sync_dashboard_slots(state: "DashboardState") -> None:
     (see :mod:`kiro_crew.session_surface`). A channel-born slot contributes its
     channel key, which is what both consumers must match against.
     """
-    keys = {effective_session_key(s) for s in state._slots.values()}
+    with _PUBLISHED_SLOT_KEYS_LOCK:
+        keys = {effective_session_key(s) for s in state._slots.values()}
+        gained = not keys <= _published_keys_of(state)
+        state._published_slot_keys = frozenset(keys)
     state.sessions.set_active_dashboard_slots(keys)
     set_dashboard_surfaced(keys)
+    # A newly open session leaves the Older Sessions listing, which tabs re-read only
+    # on a ``history`` frame; close and delete push their own, so a shrink sends none.
+    # Coalesced, because a bulk restore runs this sync once per created slot.
+    push_listing_refresh = getattr(state, "push_listing_refresh", None)
+    if gained and callable(push_listing_refresh):
+        push_listing_refresh()
