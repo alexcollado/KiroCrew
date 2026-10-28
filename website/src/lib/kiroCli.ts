@@ -22,11 +22,18 @@ const BLOCKED_KEYS = {
   kiro_cli_no_log: 'components.sessionActionsMenu.kiro_cli_blocked_no_log',
   kiro_cli_no_project: 'components.sessionActionsMenu.kiro_cli_blocked_no_project',
   kiro_cli_not_installed: 'components.sessionActionsMenu.kiro_cli_blocked_not_installed',
-  kiro_cli_busy: 'components.sessionActionsMenu.reload_blocked_running',
+  // Its own wording, with the next step, rather than Reload's "turn running".
+  kiro_cli_busy: 'components.sessionActionsMenu.kiro_cli_blocked_busy',
   kiro_cli_subagents: 'components.sessionActionsMenu.reload_blocked_subagents',
   kiro_cli_already_open: 'components.sessionActionsMenu.kiro_cli_blocked_already_open',
   kiro_cli_project_agent: 'components.sessionActionsMenu.kiro_cli_blocked_project_agent',
   kiro_cli_ended: 'components.sessionActionsMenu.kiro_cli_blocked_ended',
+  kiro_cli_launch_spec: 'components.sessionActionsMenu.kiro_cli_blocked_launch_spec',
+  kiro_cli_record: 'components.sessionActionsMenu.kiro_cli_blocked_record',
+  kiro_cli_session_file: 'components.sessionActionsMenu.kiro_cli_blocked_session_file',
+  // The chat's own agent process was still starting with no turn running: not
+  // the busy reason, which would send the person looking for a reply.
+  kiro_cli_starting: 'components.sessionActionsMenu.kiro_cli_blocked_starting',
 } as const
 
 /** The short reason for refusal `code`; an unknown code reads as unavailable. */
