@@ -1167,6 +1167,15 @@ TURN_ACTOR_META_KEY = "turnActor"
 #: provenance flags, which grant authority and are therefore never persisted.
 COMMANDS_OFF_META_KEY = "commands_off"
 
+#: Entry meta key asking for a BACKGROUND cold start for the turn the entry runs as,
+#: whoever's provenance it carries. The bulk Resume stamps it on every entry it
+#: queues: its request answers at once, so no person waits on any one of those
+#: starts. The drain honours it only when every consumed entry carries it, so a
+#: typed message drained beside it keeps its FOREGROUND start. A ``meta`` key, so
+#: the durable copy keeps it; like ``COMMANDS_OFF_META_KEY`` it only ever REMOVES
+#: something (a place in the person-only start reserve).
+START_BACKGROUND_META_KEY = "start_background"
+
 
 def queue_for_next_turn(
     state: "DashboardState",
