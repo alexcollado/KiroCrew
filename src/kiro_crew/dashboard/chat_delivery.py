@@ -120,6 +120,29 @@ QUOTE_TEXT_MAX_LEN = 2048
 QUOTE_FIELD_MAX_LEN = 256
 QUOTE_ROLES = frozenset({"user", "assistant"})
 
+# The short display label a scripted ``POST /api/chat`` may carry (``banner`` in
+# the body). It rides on the user row's meta; the row's ``content`` and the turn's
+# input stay the full message. Bounded and redacted by ``normalize_banner``, the
+# monitor-loop banner's validator, so the two labels share one cap.
+CHAT_BANNER_META_KEY = "banner"
+
+
+def banner_meta(meta: object) -> dict[str, str]:
+    """``{"banner": ...}`` for a queue entry's label when it is usable, else ``{}``.
+
+    A restored queue file is hand-editable, so the label goes through the send
+    handler's validator again: the same cap and credential redaction, and a
+    label it rejects is dropped.
+    """
+    # Deferred: autonudge_authz pulls in the autonudge service at import time.
+    from kiro_crew.autonudge_authz import normalize_banner
+
+    value = meta.get(CHAT_BANNER_META_KEY) if isinstance(meta, dict) else None
+    if not isinstance(value, str):
+        return {}
+    banner, error = normalize_banner(value, absent_ok=True)
+    return {CHAT_BANNER_META_KEY: banner} if banner and error is None else {}
+
 
 def normalize_send_id(value: object) -> str | None:
     """Return *value* when it is a usable client send-correlation id, else None.
@@ -390,6 +413,7 @@ async def steer_into_running_turn(
     delivery_id: str | None = None,
     responsive: bool = False,
     nudge_meta: dict | None = None,
+    banner: str = "",
 ) -> str:
     """Inject *message* into the slot's RUNNING turn; return a ``STEER_*`` outcome.
 
@@ -674,7 +698,7 @@ async def steer_into_running_turn(
         slot._turn_owner_sent = False
     if admission is not None:
         slot._steer_admissions[message] = admission
-    if attachments or quote or app_label or app_actor:
+    if attachments or quote or app_label or app_actor or banner:
         # Retained for the REQUEUE with the attachment lists: a steer the turn
         # ended before consuming is drained as a queued row, and that row is
         # rebuilt from this map -- without the quote here it would render its
@@ -690,6 +714,7 @@ async def steer_into_running_turn(
             **quote,
             **({"appLabel": app_label} if app_label else {}),
             **({TURN_ACTOR_META_KEY: "app"} if app_actor else {}),
+            **({CHAT_BANNER_META_KEY: banner} if banner else {}),
             # An app native-card answer is the app user's own words -- a chosen
             # option, or a free-text answer that may literally be "/clear". A
             # channel steer gets commands-off on requeue for the same reason
@@ -1054,6 +1079,9 @@ async def steer_into_running_turn(
         meta.update(attachments)
     if quote:
         meta.update(quote)
+    if banner and nudge_meta is None:
+        # Already bounded and redacted by the caller (``normalize_banner``).
+        meta[CHAT_BANNER_META_KEY] = banner
     if app_label:
         # App-authored steer: the attribution pill an app inject row uses, so a
         # native card's answer reads as the app's rather than a bare user bubble.
@@ -1139,6 +1167,8 @@ async def steer_into_running_turn(
         # Another open tab draws the steer row from this frame: without the
         # quote it would render the blockquote as text until a reload.
         push_payload.setdefault("meta", {}).update(quote)
+    if banner:
+        push_payload.setdefault("meta", {})[CHAT_BANNER_META_KEY] = banner
     state.broadcast_ws("steer_push", push_payload)
     return STEER_STEERED
 
@@ -1186,6 +1216,7 @@ def queue_for_next_turn(
     steer_intent: bool = False,
     author: dict[str, Any] | None = None,
     admission: dict[str, Any] | None = None,
+    banner: str = "",
 ) -> str:
     """Append *message* to the slot's queue and announce it; return the queue id.
 
@@ -1298,6 +1329,9 @@ def queue_for_next_turn(
         # (``attribution.author_meta``). The drain unions it onto the row and
         # charges the drained turn to that person.
         meta["author"] = dict(author)
+    if banner:
+        # Already bounded and redacted by the caller (``normalize_banner``).
+        meta[CHAT_BANNER_META_KEY] = banner
     qid = slot.queue_append(
         message,
         meta=meta,
@@ -1342,6 +1376,8 @@ def queue_for_next_turn(
     push_identity = normalize_send_id(send_id)
     if push_identity:
         push.setdefault("meta", {})["sendId"] = push_identity
+    if banner:
+        push.setdefault("meta", {})[CHAT_BANNER_META_KEY] = banner
     state.broadcast_ws("queue_push", push)
     # Accepted, and possibly not persisted: the write ceilings refuse an entry
     # past the count cap or the byte budget and the send is still accepted, so
@@ -1599,6 +1635,8 @@ def queue_entry_view(item: dict[str, Any]) -> dict[str, Any]:
     quote = quote_meta(item.get("meta"), user_origin=queue_entry_is_user_origin(item))
     if quote:
         view.setdefault("meta", {}).update(quote)
+    if banner := banner_meta(item.get("meta")):
+        view.setdefault("meta", {}).update(banner)
     # The structural kind tag rides in ``meta`` so the queue card can classify
     # a system entry (an MCP-App message, for one) without parsing its text —
     # the same enqueue-time source the server's own drain reads, and the same

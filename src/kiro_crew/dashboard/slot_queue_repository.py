@@ -950,6 +950,9 @@ class SlotQueueRepository:
             meta = item.get("meta")
             if isinstance(meta, dict):
                 meta.pop(AUTOMATION_STEER_META, None)
+                # The label summarized the old text; an edited row shows its own.
+                if previous != item["content"]:
+                    meta.pop("banner", None)
             if directive_user_origin:
                 item["_directive_user_origin"] = True
             else:

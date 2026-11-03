@@ -352,6 +352,7 @@ from kiro_crew.dashboard.chat_api.turn_stop import (  # noqa: F401
 )
 from kiro_crew.dashboard.chat_auto_tag import maybe_auto_tag  # noqa: F401
 from kiro_crew.dashboard.chat_delivery import (  # noqa: F401
+    CHAT_BANNER_META_KEY,
     STEER_REQUEUED,
     STEER_STEERED,
     TURN_ACTOR_META_KEY,
@@ -665,7 +666,11 @@ _SESSION_RELOAD_NOTICE = (
 #: could displace human sessions. Stripped here so the gateway re-applies it below
 #: only for a genuine human send. ``TURN_ACTOR_META_KEY`` is the gateway's record
 #: that an app sent the row, which the title counter reads (``chat_title``).
-RESERVED_ROW_META_KEYS = frozenset({"decisions_strip", HUMAN_TURN_META_KEY, TURN_ACTOR_META_KEY})
+#: ``CHAT_BANNER_META_KEY`` is set only from the body's validated ``banner``
+#: field, so ``meta.banner`` cannot skip its length cap and redaction.
+RESERVED_ROW_META_KEYS = frozenset(
+    {"decisions_strip", HUMAN_TURN_META_KEY, TURN_ACTOR_META_KEY, CHAT_BANNER_META_KEY}
+)
 
 #: The ``steer`` value that means "let Jev choose between the two paths" rather
 #: than naming one. A STRING beside the boolean the two manual modes send, so the
