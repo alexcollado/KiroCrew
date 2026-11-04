@@ -7,6 +7,8 @@
 // - the row's switch reads off and, when pressed, writes NOTHING and reads
 //   nothing: it moves focus to the row's Approve button
 // - Approve re-sends stub=true pinned to the refusal's own expected_launch
+// - "Don't share new command" beside it takes the mark off (stub=false) and
+//   approves nothing
 // - a refusal with no approvable identity has no approve control, only a
 //   Remove button that takes the mark off (stub=false), never an approval
 // - an older gateway that sends no `launch_refused` keeps the plain states
@@ -103,6 +105,18 @@ describe('a refused launch', () => {
     fireEvent.click(await screen.findByRole('button', { name: rowName('new_command_button') }, { timeout: 5000 }))
     await waitFor(() => expect(setStub).toHaveBeenCalledWith('alpha-mcp', true, 'a:b'), { timeout: 5000 })
     expect(setStub).toHaveBeenCalledTimes(1)
+  })
+
+  it('declines a refused row\'s new command with stub=false, approving nothing', async () => {
+    vi.spyOn(api, 'mcpGatewayStatus').mockResolvedValue(status({ launch_refused: { 'alpha-mcp': changed } }) as never)
+    vi.spyOn(api, 'mcpGatewayServers').mockResolvedValue({ servers: [server] } as never)
+    const setStub = vi.spyOn(api, 'mcpGatewaySetStub').mockResolvedValue({ ok: true, name: 'alpha-mcp', stub: false } as never)
+
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: rowName('dont_share_new_command') }, { timeout: 5000 }))
+    await waitFor(() => expect(setStub).toHaveBeenCalledWith('alpha-mcp', false, undefined), { timeout: 5000 })
+    expect(setStub).toHaveBeenCalledTimes(1)
+    expect(setStub).not.toHaveBeenCalledWith('alpha-mcp', true, expect.anything())
   })
 
   it('offers no approve control for a refusal with no approvable identity, only a Remove button', async () => {

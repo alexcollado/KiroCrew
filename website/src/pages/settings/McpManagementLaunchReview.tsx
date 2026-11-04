@@ -323,8 +323,9 @@ function ShareSwitch({
  * `McpManagement`). Turning it off stops sharing, or takes the mark off while
  * page-wide sharing is off. A row whose launch was refused runs nothing
  * shared, so its switch reads off, beside an "Approve update" button carrying
- * the refused launch's own `expected_launch`; pressing the switch writes
- * nothing and moves focus to that button. A refused launch with no approvable identity offers no
+ * the refused launch's own `expected_launch` and a "Don't share new command"
+ * button that takes the mark off; pressing the switch writes nothing and
+ * moves focus to the Approve button. A refused launch with no approvable identity offers no
  * button and says why, and its switch takes the leftover mark off.
  */
 export function ShareAction({
@@ -357,6 +358,7 @@ export function ShareAction({
   // on screen matches it.
   const labelId = `mcp-share-label-${server.name}`
   const approveId = `mcp-approve-label-${server.name}`
+  const stopId = `mcp-stop-label-${server.name}`
   const rowName = serverNameId(server.name)
   // On, the switch always turns off. Off, it turns on only where sharing works.
   // A marked row that cannot share (an env a shared copy would withhold, or a
@@ -419,24 +421,39 @@ export function ShareAction({
     return (
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
         {refusedToggle}
+        {/* No approvable identity means no buttons; the row's hint says why. */}
         {approvable ? (
-          <Btn
-            ref={approveRef}
-            type="button"
-            primary
-            className={SHARE_BUTTON_CLASS}
-            disabled={busy || !supported}
-            aria-labelledby={`${approveId} ${rowName}`}
-            aria-describedby={describedBy}
-            onClick={() => onConfirm(refusal.expected_launch as string)}
-          >
-            <Check size={14} aria-hidden="true" />
-            <span id={approveId}>
-              {i18nT(firstApproval ? 'pages.mcpManagement.approve_button' : 'pages.mcpManagement.new_command_button')}
-            </span>
-          </Btn>
+          <>
+            <Btn
+              ref={approveRef}
+              type="button"
+              primary
+              className={SHARE_BUTTON_CLASS}
+              disabled={busy || !supported}
+              aria-labelledby={`${approveId} ${rowName}`}
+              aria-describedby={describedBy}
+              onClick={() => onConfirm(refusal.expected_launch as string)}
+            >
+              <Check size={14} aria-hidden="true" />
+              <span id={approveId}>
+                {i18nT(firstApproval ? 'pages.mcpManagement.approve_button' : 'pages.mcpManagement.new_command_button')}
+              </span>
+            </Btn>
+            {/* "Don't share new command" takes the mark off (stub=false)
+                without approving the refused launch, so a person who does
+                not want the new command can leave it unshared from here. */}
+            <Btn
+              type="button"
+              className={SHARE_BUTTON_CLASS}
+              disabled={busy}
+              aria-labelledby={`${stopId} ${rowName}`}
+              aria-describedby={describedBy}
+              onClick={onStop}
+            >
+              <span id={stopId}>{i18nT('pages.mcpManagement.dont_share_new_command')}</span>
+            </Btn>
+          </>
         ) : null}
-        {/* No approvable identity means no button; the row's hint says why. */}
       </div>
     )
   }
