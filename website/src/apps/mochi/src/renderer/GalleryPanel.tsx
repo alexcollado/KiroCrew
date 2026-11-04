@@ -12,7 +12,9 @@
  * - Import Pack button (from .mochipack.zip)
  * - Listens to gallery:active-changed and gallery:packs-changed broadcasts
  */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useDialogFocusTrap } from '../../../../hooks/useDialogFocusTrap'
+import { useImeGuard } from '../../../../hooks/useImeGuard'
 import type { PackMeta , SpriteConfig } from '../shared/appearanceTypes'
 import { REQUIRED_STATES, OPTIONAL_STATES, ALL_MOODS } from '../shared/appearanceTypes'
 import { toDataUri } from './animationResolver'
@@ -448,6 +450,20 @@ function DetailPanel({ detail, isActive, onClose, onApply, onExport, onEdit, onD
   // sprite one is the pre-existing form an imported sheet still uses.
   const mirror = detail.flipX ?? sc?.flipX
   const [showColorCustomizer, setShowColorCustomizer] = useState(false)
+  const titleId = useId()
+  // A modal sheet: focus moves in on open and Tab stays inside. The trap does
+  // not claim Escape: its capture-phase listener would run before a text
+  // field's own Escape (the colour customizer's "Save preset" name closes its
+  // inline form on Escape) and close the whole sheet instead.
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogFocusTrap(dialogRef, onClose, { handleEscape: false })
+  const ime = useImeGuard()
+  const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Escape' || ime.isComposing(e)) return
+    const target = e.target as HTMLElement
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return
+    onClose()
+  }
   const isDefaultMochi = meta.id === 'default-mochi'
   const thumbColorMap = isDefaultMochi ? colorMap : null
 
@@ -478,11 +494,12 @@ function DetailPanel({ detail, isActive, onClose, onApply, onExport, onEdit, onD
 
   return (
     <div role="presentation" style={S.detailOverlay} onClick={onClose}>
-      <div role="presentation" style={S.detailPanel} onClick={(e) => e.stopPropagation()}>
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- stopPropagation prevents backdrop dismiss when clicking inside modal; Escape closes it */}
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} style={S.detailPanel} onClick={(e) => e.stopPropagation()} onKeyDown={onDialogKeyDown}>
         {/* Header */}
         <div style={S.detailHeader}>
           <div style={{ flex: 1 }}>
-            <div style={S.detailTitle}>{meta.name}</div>
+            <div id={titleId} style={S.detailTitle}>{meta.name}</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
               {meta.author} · {meta.format.toUpperCase()}
             </div>

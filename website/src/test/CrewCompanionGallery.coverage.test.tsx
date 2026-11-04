@@ -438,6 +438,13 @@ describe('pack detail sheet', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
   })
 
+  it('is named by the pack it shows', async () => {
+    await mount()
+    await openDetail('Boba')
+    const dialog = screen.getByRole('dialog', { name: 'Boba' })
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+  })
+
   it('lists only the optional groups the pack actually provides', async () => {
     api.galleryGetPackDetail.mockResolvedValue(
       detailFor(custom, { idle: SVG, done: SVG, walking: SVG }),
@@ -754,6 +761,19 @@ describe('importing a pet from PetDex', () => {
       description: 'round cat',
       spriteBase64: 'AAAA',
     })
+  })
+
+  it('is a dialog named by its heading', async () => {
+    await openImport()
+    const dialog = screen.getByRole('dialog', { name: 'Import a companion' })
+    await tick(0)
+    // Tab from the last control wraps to the first instead of leaving the modal.
+    const controls = Array.from(
+      dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])'),
+    )
+    controls[controls.length - 1].focus()
+    fireEvent.keyDown(controls[controls.length - 1], { key: 'Tab' })
+    expect(document.activeElement).toBe(controls[0])
   })
 
   it('looks the pet up only after typing settles, then shows what it found', async () => {

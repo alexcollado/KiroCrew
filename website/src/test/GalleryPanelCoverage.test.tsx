@@ -129,8 +129,13 @@ vi.mock('../apps/mochi/src/renderer/SpriteImporter', () => ({
 }))
 
 vi.mock('../apps/mochi/src/renderer/ColorCustomizer', () => ({
+  // The input stands in for the real panel's "Save preset" name field, which
+  // closes its own inline form on Escape.
   ColorCustomizerPanel: ({ idleSvgContent }: { idleSvgContent: string }) => (
-    <div data-testid="color-panel">{idleSvgContent}</div>
+    <div data-testid="color-panel">
+      {idleSvgContent}
+      <input aria-label="preset-name" />
+    </div>
   ),
 }))
 
@@ -250,7 +255,9 @@ function cardFor(name: string): HTMLElement {
  * the images too and "the sheet" would resolve to a thumbnail.
  */
 function sheetNodes(): HTMLElement[] {
-  return Array.from(document.querySelectorAll('div[role="presentation"]')) as HTMLElement[]
+  return Array.from(
+    document.querySelectorAll('div[role="presentation"], div[role="dialog"]'),
+  ) as HTMLElement[]
 }
 
 function sheet(): HTMLElement {
@@ -421,6 +428,18 @@ describe('GalleryPanel — detail sheet', () => {
     expect(within(panel).getByText('—')).toBeTruthy()
   })
 
+  it('is a modal dialog named by the pack it shows', async () => {
+    await mount()
+    await open('Mochi Cat')
+    const dialog = screen.getByRole('dialog', { name: 'Mochi Cat' })
+    expect(dialog).toBe(sheet())
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
+    // A modal takes focus on open and gives it back an Escape to close it.
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
   it('lists mood animations only for packs that ship them', async () => {
     await mount()
     await open('Mochi Cat')
@@ -515,6 +534,16 @@ describe('GalleryPanel — detail sheet', () => {
     expect(within(sheet()).getByText(t('apps.mochi.color.hide_btn'))).toBeTruthy()
     fireEvent.click(within(sheet()).getByText(t('apps.mochi.color.hide_btn')))
     expect(within(sheet()).getByText(t('apps.mochi.color.customize_btn'))).toBeTruthy()
+  })
+
+  it('leaves Escape in a text field to that field rather than closing the sheet', async () => {
+    await mount()
+    await open('Mochi Cat')
+    fireEvent.click(within(sheet()).getByText(t('apps.mochi.color.customize_btn')))
+    const name = within(sheet()).getByLabelText('preset-name')
+    name.focus()
+    fireEvent.keyDown(name, { key: 'Escape' })
+    expect(screen.getByRole('dialog', { name: 'Mochi Cat' })).toBeTruthy()
   })
 
   it('hides the colour customiser for every other pack', async () => {
