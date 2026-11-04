@@ -1396,9 +1396,7 @@ def test_completed_cutover_undo_target_hides_non_actionable_history(
     assert out is None
 
 
-# --------------------------------------------------------------------------
-# _fetch_pr_head_oid -- survives a deleted head branch (Defect 2)
-# --------------------------------------------------------------------------
+# _fetch_pr_head_oid -- survives a deleted head branch
 @pytest.mark.asyncio
 async def test_fetch_pr_head_oid_uses_list_not_view(monkeypatch):
     """The lookup uses ``gh pr list --head`` (which resolves a merged PR after
