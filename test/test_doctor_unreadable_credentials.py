@@ -2,9 +2,8 @@
 
 The credentials read can raise PermissionError (inside an agent sandbox, or on
 a file with the wrong owner). The Configuration section keeps going with the
-environment's credentials only. Inside a sandbox the row is a skip; outside one
-it is an issue, the same policy doctor applies to other unreadable data-home
-files.
+environment's credentials only, and the shared data-home helper reports the
+denial: a skip inside a sandbox, an issue outside one.
 """
 
 from __future__ import annotations
@@ -30,10 +29,10 @@ def _cfg(url: str, exc: BaseException | None = None):
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch):
-    monkeypatch.delenv("KIROCREW_PORT", raising=False)
+def _clean_env(_floor_monkeypatch):
+    _floor_monkeypatch.delenv("KIROCREW_PORT", raising=False)
     for key in CREDENTIAL_KEYS:
-        monkeypatch.delenv(key, raising=False)
+        _floor_monkeypatch.delenv(key, raising=False)
 
 
 def _confined(monkeypatch, value):
@@ -52,8 +51,8 @@ def test_unreadable_credentials_outside_a_sandbox_are_an_issue(monkeypatch, caps
     binding = services._doctor_configuration(_cfg("http://localhost:8080"), issues)
 
     out = capsys.readouterr().out
-    assert "credentials: ❌ the credentials file is not readable (Operation not permitted)" in out
-    assert issues == ["credentials: the credentials file is not readable"]
+    assert "credentials: ❌ a file it reads is not readable (Operation not permitted)" in out
+    assert issues == ["credentials: a file it reads is not readable"]
     assert binding.creds == {}
     assert binding.has_slack is False
 
@@ -74,7 +73,7 @@ def test_a_broken_confinement_probe_counts_the_issue(monkeypatch, capsys):
 
     services._doctor_configuration(_cfg("http://localhost:8080"), issues)
 
-    assert issues == ["credentials: the credentials file is not readable"]
+    assert issues == ["credentials: a file it reads is not readable"]
 
 
 def test_unreadable_credentials_keep_the_environment_tokens(monkeypatch, capsys):
@@ -112,6 +111,4 @@ def test_unreadable_credentials_without_strerror_still_report(monkeypatch, capsy
 
     services._doctor_configuration(_cfg("http://localhost:8080", PermissionError()), [])
 
-    assert "credentials: ❌ the credentials file is not readable (permission denied)" in (
-        capsys.readouterr().out
-    )
+    assert "credentials: ❌ a file it reads is not readable" in capsys.readouterr().out
