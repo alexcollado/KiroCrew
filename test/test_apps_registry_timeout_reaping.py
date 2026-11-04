@@ -118,9 +118,7 @@ def _record_tree_kill(monkeypatch) -> list[int]:
     return killed
 
 
-# --------------------------------------------------------------------------
 # Shared helper: _communicate_with_timeout (mechanism behind bugs 1, 2a, 2b)
-# --------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_communicate_with_timeout_kills_and_reaps_real_subprocess():
     """A hung child (its own session leader) must be group-killed AND reaped."""
@@ -186,9 +184,7 @@ async def test_communicate_with_timeout_falls_back_when_group_kill_fails(monkeyp
     assert proc.wait_calls == 0
 
 
-# --------------------------------------------------------------------------
 # Bug 1 — git-clone manifest fetch reaps the clone tree on timeout
-# --------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_fetch_app_manifest_reaps_clone_tree_on_timeout(monkeypatch):
     proc = _TimeoutProc()
@@ -217,9 +213,7 @@ async def test_fetch_app_manifest_reaps_clone_tree_on_timeout(monkeypatch):
     assert proc.wait_calls == 0
 
 
-# --------------------------------------------------------------------------
 # Bug 2a — list_registry detectInstalled probe reaps the tree on timeout
-# --------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_list_registry_reaps_detect_probe_tree_on_timeout(monkeypatch):
     entry = {"name": "probeapp", "repo": "x", "detectInstalled": "true"}
@@ -255,9 +249,7 @@ async def test_list_registry_reaps_detect_probe_tree_on_timeout(monkeypatch):
     assert proc.wait_calls == 0
 
 
-# --------------------------------------------------------------------------
 # The off-network switch also covers the listing's per-row manifest clone
-# --------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_resolve_manifest_does_not_clone_under_the_skip_switch(monkeypatch, tmp_path):
     """A seed row with no cached manifest renders its minimal info, no clone.
@@ -280,9 +272,7 @@ async def test_resolve_manifest_does_not_clone_under_the_skip_switch(monkeypatch
     assert await registry._resolve_manifest(dict(entry)) == entry
 
 
-# --------------------------------------------------------------------------
 # Bug 2b — install_from_registry detect probe reaps the tree on timeout
-# --------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_install_from_registry_reaps_detect_probe_tree_on_timeout(monkeypatch):
     entry = {
@@ -322,9 +312,7 @@ async def test_install_from_registry_reaps_detect_probe_tree_on_timeout(monkeypa
     assert proc.wait_calls == 0
 
 
-# --------------------------------------------------------------------------
 # Bug 3 — install-script timeout: reap + SIGKILL escalation
-# --------------------------------------------------------------------------
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     not platform_compat.IS_POSIX,
@@ -657,9 +645,7 @@ async def test_install_script_on_native_windows_fails_clearly_without_spawning(
     ]
 
 
-# --------------------------------------------------------------------------
 # A cancelled wait abandons the detached child just as a timeout does
-# --------------------------------------------------------------------------
 class _BlockingProc:
     """Fake subprocess whose first ``communicate()`` waits until cancelled.
 

@@ -841,7 +841,6 @@ async def test_double_cancel_waits_for_fetch_cleanup_before_restoring_checkout(
     assert (dest / "local-edit.txt").is_file(), "late cleanup deleted restored checkout"
 
 
-# ---------------------------------------------------------------------------
 # A failed FRESH clone must actually remove the partial checkout on Windows.
 #
 # git writes `.git/objects/pack/*.{pack,idx,rev}` read-only. On Windows that is
@@ -857,7 +856,6 @@ async def test_double_cancel_waits_for_fetch_cleanup_before_restoring_checkout(
 # parent directory's write permission does), so `rmtree` succeeds either way and
 # the test would be green before the fix. Hence a platform gate rather than a
 # simulated failure -- the real file attribute is the entire mechanism.
-# ---------------------------------------------------------------------------
 
 
 def _partial_clone(dest):

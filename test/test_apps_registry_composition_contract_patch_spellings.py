@@ -36,9 +36,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MULTI_HOLDER = "_strip_git_target_userinfo"
 
 
-# ---------------------------------------------------------------------------
 # The patch spellings the suite may use on the facade
-# ---------------------------------------------------------------------------
 
 #: The patch callables by the dotted path they resolve to: which one, and the index of
 #: ``create`` among its positional parameters.

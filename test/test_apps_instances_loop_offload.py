@@ -45,9 +45,7 @@ import kiro_crew.dashboard.handlers_instances_peer as handlers_instances_peer_mo
 import kiro_crew.instances.ssh_tunnel_manager as ssh_tunnel_manager_mod
 from kiro_crew.instances.ssh_tunnel_manager import SshTunnelManager, TunnelStatus
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _recorder(record: list[threading.Thread], result: Any = None) -> Callable[..., Any]:
@@ -117,9 +115,7 @@ def _pin_forwarder_identity(monkeypatch: pytest.MonkeyPatch, *, reachable: bool)
         monkeypatch.setattr(ssh_tunnel_manager_mod, "_reclaim_identity_key", lambda: b"k" * 32)
 
 
-# ---------------------------------------------------------------------------
 # Behavior: the walk / write happens on a worker thread, not the loop thread
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -344,9 +340,7 @@ def test_list_apps_is_read_only_under_version_drift(
     ), "list_apps() wrote installed.json — the listing must be read-only"
 
 
-# ---------------------------------------------------------------------------
 # AST ratchet: no direct sync call of the walk / registry writes in async frames
-# ---------------------------------------------------------------------------
 
 # Scopes not descended into from an async def body: a nested function or lambda
 # is a different execution frame (typically the offloaded callable itself).
@@ -492,9 +486,7 @@ def test_no_direct_registry_call_in_instances_handler_async_frames() -> None:
     assert not offenders, "direct registry call on the event loop:\n" + "\n".join(offenders)
 
 
-# ---------------------------------------------------------------------------
 # App config writes: the same off-loop rule, applied to config.json
-# ---------------------------------------------------------------------------
 
 
 def _admit_as_owner(monkeypatch: pytest.MonkeyPatch) -> None:

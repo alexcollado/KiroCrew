@@ -32,9 +32,7 @@ from apps_backend_coverage_helpers import (
 import kiro_crew.apps.backend as bmod
 from kiro_crew.testing.wait import wait_until
 
-# ---------------------------------------------------------------------------
 # Node / npm binary resolution
-# ---------------------------------------------------------------------------
 
 
 class TestNvmResolution:
@@ -155,9 +153,7 @@ class TestNvmResolution:
         assert bmod._find_npm_binary() == "/usr/bin/npm"
 
 
-# ---------------------------------------------------------------------------
 # Entry-point heuristics
-# ---------------------------------------------------------------------------
 
 
 class TestEntryHeuristics:
@@ -192,9 +188,7 @@ class TestEntryHeuristics:
         assert bmod._shebang_argv(entry) == ["/usr/bin/env", "bash"]
 
 
-# ---------------------------------------------------------------------------
 # Shared interpreter resolution (apps/interpreter.py)
-# ---------------------------------------------------------------------------
 
 
 def _write_runnable(path: Any) -> None:
@@ -490,9 +484,7 @@ class TestInterpreterResolution:
         assert venv_provided_command(tmp_path, "my-tool") == str(deps_script)
 
 
-# ---------------------------------------------------------------------------
 # Spawn body: dispatch branches
-# ---------------------------------------------------------------------------
 
 
 class TestNodeDispatch:
@@ -698,9 +690,7 @@ class TestAsgiDispatch:
         assert str(app_deps_dir(spawn_root)) not in child_pp, child_pp
 
 
-# ---------------------------------------------------------------------------
 # Spawn body: environment construction and the Popen tail
-# ---------------------------------------------------------------------------
 
 
 class TestSpawnEnvironment:

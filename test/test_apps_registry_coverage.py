@@ -36,9 +36,7 @@ from conftest import requires_symlinks
 from kiro_crew.apps import registry
 from kiro_crew.apps.manifest import AppManifest
 
-# ---------------------------------------------------------------------------
 # Build step selection + execution
-# ---------------------------------------------------------------------------
 
 
 class TestRunAppBuild:

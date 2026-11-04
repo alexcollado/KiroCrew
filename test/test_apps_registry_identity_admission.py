@@ -24,9 +24,7 @@ from kiro_crew import platform_compat
 from kiro_crew.apps import registry
 
 
-# --------------------------------------------------------------------------
 # Identity-refusal cleanup + provenance-signer freshness
-# --------------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_identity_refusal_preserves_preexisting_checkout(monkeypatch, tmp_path):
     """UPDATE path: a pull that brings a self-renaming manifest is refused

@@ -31,9 +31,7 @@ from apps_backend_coverage_helpers import _capture_popen, _manifest, _record_run
 import kiro_crew.apps.backend as bmod
 from kiro_crew.testing.wait import default_timeout
 
-# ---------------------------------------------------------------------------
 # Spawn body: dependency installation
-# ---------------------------------------------------------------------------
 
 
 class TestDependencyInstall:

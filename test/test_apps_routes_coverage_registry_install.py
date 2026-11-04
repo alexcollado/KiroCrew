@@ -49,9 +49,7 @@ def _sse_events(text: str) -> list[tuple[str, str]]:
     return events
 
 
-# ---------------------------------------------------------------------------
 # _client_install_manifest
-# ---------------------------------------------------------------------------
 
 
 class TestClientInstallManifest:
@@ -75,9 +73,7 @@ class TestClientInstallManifest:
         assert not cfg.supports_platform("linux")
 
 
-# ---------------------------------------------------------------------------
 # POST /api/apps/registry/install
-# ---------------------------------------------------------------------------
 
 
 class TestRegistryInstall:
@@ -185,9 +181,7 @@ class TestRegistryInstall:
         assert calls == ["stop", "deregister"]
 
 
-# ---------------------------------------------------------------------------
 # POST /api/apps/registry/install-stream (SSE)
-# ---------------------------------------------------------------------------
 
 
 class TestRegistryInstallStream:
@@ -408,9 +402,7 @@ class TestRegistryInstallStream:
         assert any(b"event: done" in w for w in writes)
 
 
-# ---------------------------------------------------------------------------
 # PUT /api/apps/registries — config-file failure modes
-# ---------------------------------------------------------------------------
 
 
 class TestRegistriesConfigFailures:

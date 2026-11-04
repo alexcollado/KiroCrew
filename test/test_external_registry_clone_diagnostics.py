@@ -140,7 +140,6 @@ class TestCloneFailureDiagnostics:
         assert "credential" not in err["error"].lower()
 
 
-# ---------------------------------------------------------------------------
 # Clone-failure diagnostics honesty.
 #   Finding 1: the index-originated credential-posture hint must only fire when
 #   git's output is auth-shaped (or ambiguously so); a DNS blip or typo'd
@@ -149,7 +148,6 @@ class TestCloneFailureDiagnostics:
 #   Finding 2: three sibling failure shapes must carry the human sentence in
 #   `error` and the machine slug in `code` (the install banner renders
 #   `result.error` verbatim and ignores `code`).
-# ---------------------------------------------------------------------------
 
 
 class _FailingCloneProc:

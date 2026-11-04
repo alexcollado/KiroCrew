@@ -20,9 +20,7 @@ from conftest import requires_symlinks
 from kiro_crew.apps import registry
 from kiro_crew.apps.registry_pipeline import manifests as manifests_mod
 
-# ---------------------------------------------------------------------------
 # Manifest cache
-# ---------------------------------------------------------------------------
 
 
 class TestManifestCache:
@@ -239,9 +237,7 @@ class TestManifestCacheGc:
         assert registry._read_manifest_cache(self._DEMO) == {"name": "demo", "v": 2}
 
 
-# ---------------------------------------------------------------------------
 # Subdirectory containment
-# ---------------------------------------------------------------------------
 
 
 class TestSubdirGates:
@@ -315,9 +311,7 @@ class TestSubdirGates:
             assert registry._contained_join(root, subdir) is None
 
 
-# ---------------------------------------------------------------------------
 # Manifest fetch
-# ---------------------------------------------------------------------------
 
 
 def _tmp_clone_dir(monkeypatch, tmp_path, name: str = "clone") -> Path:
@@ -534,9 +528,7 @@ class TestFetchAppManifest:
         assert modes == ["strict"]
 
 
-# ---------------------------------------------------------------------------
 # Manifest resolution / merge / enrichment
-# ---------------------------------------------------------------------------
 
 
 class TestResolveManifest:

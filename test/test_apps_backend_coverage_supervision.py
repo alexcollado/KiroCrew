@@ -45,9 +45,7 @@ class _SweepClock(ManualClock):
         self._on_sleep(seconds)
 
 
-# ---------------------------------------------------------------------------
 # Accessors
-# ---------------------------------------------------------------------------
 
 
 def test_the_proxy_port_is_only_published_once_the_backend_is_healthy() -> None:
@@ -62,9 +60,7 @@ def test_the_proxy_port_is_only_published_once_the_backend_is_healthy() -> None:
     assert bmod.get_app_backend_port("absent") is None
 
 
-# ---------------------------------------------------------------------------
 # Pidfile helpers
-# ---------------------------------------------------------------------------
 
 
 class TestPidfileHelpers:

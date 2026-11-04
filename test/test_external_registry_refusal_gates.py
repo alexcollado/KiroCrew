@@ -19,9 +19,7 @@ from external_registry_helpers import _catalog_absent  # noqa: F401
 from external_registry_helpers import _explicit_registry_execution_admission  # noqa: F401
 from external_registry_helpers import cache_dir_fixture  # noqa: F401
 
-# ---------------------------------------------------------------------------
 # Untrusted index `subdirectory` path-traversal gate (CWE-22 → RCE).
-# ---------------------------------------------------------------------------
 
 
 class TestRegistrySubdirTraversalGate:

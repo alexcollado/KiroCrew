@@ -492,9 +492,7 @@ class TestMoveAsideRefreshesMtimeBeforeRename:
         assert (aside / "marker.txt").read_text(encoding="utf-8") == "recovery copy"
 
 
-# ---------------------------------------------------------------------------
 # Stale checkout retention on success + aged sweep
-# ---------------------------------------------------------------------------
 
 
 class TestSuccessPathRetainsStaleCheckout:

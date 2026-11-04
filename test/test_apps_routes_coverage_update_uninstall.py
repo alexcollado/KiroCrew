@@ -35,9 +35,7 @@ import kiro_crew.apps.routes as routes_mod
 from kiro_crew.apps.manager import AppResult, disable_app, enable_app, register_external_app
 from kiro_crew.apps.routes import register_app_routes
 
-# ---------------------------------------------------------------------------
 # POST /api/apps/{name}/update
-# ---------------------------------------------------------------------------
 
 
 class TestUpdateApp:
@@ -573,9 +571,7 @@ class TestUpdateApp:
         assert not (home / "apps" / APP / "attacker.py").exists()
 
 
-# ---------------------------------------------------------------------------
 # Uninstall preview + uninstall refusals
-# ---------------------------------------------------------------------------
 
 
 class TestUninstallPreview:
@@ -805,9 +801,7 @@ class TestUninstallRefusals:
             assert (await resp.json())["error"] == "permission denied"
 
 
-# ---------------------------------------------------------------------------
 # DELETE /api/apps/{name}/migrate-cleanup
-# ---------------------------------------------------------------------------
 
 
 class TestMigrateCleanup:

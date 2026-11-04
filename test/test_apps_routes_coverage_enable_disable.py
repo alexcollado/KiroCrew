@@ -31,9 +31,7 @@ import kiro_crew.apps.routes as routes_mod
 from kiro_crew.apps.manager import AppResult, disable_app, enable_app, register_external_app
 from kiro_crew.testing.wait import await_until
 
-# ---------------------------------------------------------------------------
 # Enable / disable warning + rollback branches
-# ---------------------------------------------------------------------------
 
 
 class TestEnableRefusesAppTokens:
@@ -673,9 +671,7 @@ class TestRecordReadsRunOffTheLoop:
         assert disable_reads == [("get_app", False), ("app_enabled_state", False)]
 
 
-# ---------------------------------------------------------------------------
 # Native-Windows exec backend refusal reaches the enable response
-# ---------------------------------------------------------------------------
 
 
 def _install_with_backend(tmp_path: Path, entry: str, body: str, **backend: Any) -> None:

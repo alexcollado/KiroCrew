@@ -26,9 +26,7 @@ from external_registry_helpers import cache_dir_fixture  # noqa: F401
 
 from kiro_crew.apps.registry import get_registry_app
 
-# ---------------------------------------------------------------------------
 # Operator-configured registry branch overrides per-app declarations
-# ---------------------------------------------------------------------------
 
 
 class TestConfiguredBranchOverride:
@@ -207,11 +205,9 @@ class TestConfiguredBranchOverride:
         assert result["branch"] == "develop"
 
 
-# ---------------------------------------------------------------------------
 # Branch-aware manifest fast path: persistent clone on branch A + entry
 # branch B must NOT serve the stale (branch-A) manifest through the fast path.
 # (registry-admission-branch-consistency)
-# ---------------------------------------------------------------------------
 
 
 class TestManifestBranchGate:

@@ -645,7 +645,6 @@ class TestApplyTrustFields:
         assert all("_index_author" not in r for r in rows.values())
 
 
-# ---------------------------------------------------------------------------
 # External registries must surface on the ONLINE catalog path.
 #
 # Regression: handle_registry prefers list_catalog_apps when the published
@@ -653,7 +652,6 @@ class TestApplyTrustFields:
 # merged external registries) when the catalog is empty. So a configured
 # external app was silently dropped from the store the moment the catalog came
 # online. list_catalog_apps now appends external-registry rows itself.
-# ---------------------------------------------------------------------------
 _PINNED_SHA = "a" * 40
 
 
@@ -805,7 +803,6 @@ class TestCatalogAppsIncludesExternalRegistries:
         assert rows.get("filtered-git", {}).get("provenance") != "external"
         assert "filtered-git" not in rows
 
-    # -----------------------------------------------------------------------
     # Regression: the storefront intersected every catalog `git` row with the
     # BUNDLED SEED, which ships only at release cadence. `inventory` was added so
     # the catalog itself could supply validated pinned coordinates, and the install
@@ -813,7 +810,6 @@ class TestCatalogAppsIncludesExternalRegistries:
     # day earlier and still asked the seed. The two resolvers disagreed: install
     # accepted a catalog-only app while the store hid it, so a freshly published
     # app was undiscoverable until a release shipped a new seed.
-    # -----------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_a_catalog_pinned_git_row_is_listed_without_a_seed_entry(self, monkeypatch):
         """A `git` row the catalog PINS is listed even though the seed omits it."""
@@ -979,13 +975,11 @@ class TestCatalogAppsIncludesExternalRegistries:
         )
 
 
-# ---------------------------------------------------------------------------
 # Git-install build step: the interpreter, and where the build runs.
 #
 # Both properties below were broken and NEITHER had a test, which is why they
 # survived — and both fail SILENTLY, reporting a successful install that installed
 # nothing the gateway can import.
-# ---------------------------------------------------------------------------
 
 
 def _build_cmds_for(tmp_path, monkeypatch, files: dict[str, str]) -> list[list[str]]:
