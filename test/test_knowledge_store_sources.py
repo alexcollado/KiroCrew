@@ -25,9 +25,7 @@ from kiro_crew.testing.wait import async_wait_until, await_until, finished
 # depend on the host's clock or its time zone.
 _ROW_STAMP = "2026-10-01T12:00:00"
 
-# ---------------------------------------------------------------------------
 # 7. KnowledgeStore -- additional coverage
-# ---------------------------------------------------------------------------
 
 
 class TestKnowledgeStoreExtended:
@@ -711,9 +709,7 @@ class TestKnowledgeStoreExtended:
         s2.close()
 
 
-# ---------------------------------------------------------------------------
 # 7b. Retirement of folders Kiro Crew registered itself
-# ---------------------------------------------------------------------------
 
 
 class TestRetireAutoRegisteredFolders:
@@ -1277,9 +1273,7 @@ class TestScheduledDedupCadence:
         assert w._dedup_applied_once is False
 
 
-# ---------------------------------------------------------------------------
 # SyncScheduler.sync_all -- errored sources must be quiesced
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio

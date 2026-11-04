@@ -51,7 +51,7 @@ def _add_job(store, job_id="job-1", *, status="processing", source_id=None):
     return job_id
 
 
-# ---------------------------------------------------------------- namespaces
+# namespaces
 
 
 class TestListNamespaces:
@@ -82,7 +82,7 @@ class TestListNamespaces:
         assert data == [{"name": "default", "count": 1}]
 
 
-# --------------------------------------------------------------------- items
+# items
 
 
 class TestGetItem:
@@ -231,7 +231,7 @@ class TestGetItemContent:
             assert await resp.text() == "hello body"
 
 
-# ------------------------------------------------------------------ entities
+# entities
 
 
 class TestListEntities:
@@ -476,7 +476,7 @@ class TestGetFullGraph:
         assert data == {"nodes": [], "edges": []}
 
 
-# --------------------------------------------------------------------- stats
+# stats
 
 
 class TestGetStats:
@@ -508,7 +508,7 @@ class TestGetStats:
         assert data["embeddings"]["available"] is False
 
 
-# ---------------------------------------------------------------------- jobs
+# jobs
 
 
 class TestGetJob:
@@ -526,7 +526,7 @@ class TestGetJob:
         assert data["status"] == "completed"
 
 
-# ------------------------------------------------------------- export/import
+# export/import
 
 
 class TestExport:
@@ -1228,7 +1228,7 @@ class TestImportBundle:
         assert row["slug"] == slug, "the stored key was redacted; it must stay byte-exact"
 
 
-# ----------------------------------------------------------------- embeddings
+# embeddings
 
 
 class TestGetEmbeddingStatus:

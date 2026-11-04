@@ -20,9 +20,7 @@ from kiro_crew.knowledge.extractor import EntityExtractor
 from kiro_crew.knowledge.readers import FileReader
 from kiro_crew.knowledge.retrieval import ANY_EMBEDDING_SPACE, HybridRetriever, _bytes_to_floats
 
-# ---------------------------------------------------------------------------
 # 8. HybridRetriever -- additional coverage
-# ---------------------------------------------------------------------------
 
 
 class TestHybridRetrieverExtended:
@@ -105,9 +103,7 @@ class TestHybridRetrieverExtended:
         assert _bytes_to_floats(b"not json") == []
 
 
-# ---------------------------------------------------------------------------
 # 9. EntityExtractor -- additional coverage
-# ---------------------------------------------------------------------------
 
 
 class TestEntityExtractorExtended:
@@ -234,9 +230,7 @@ class TestEntityExtractorExtended:
         assert result["category"] == "runbook"
 
 
-# ---------------------------------------------------------------------------
 # 10. Chunker -- additional coverage
-# ---------------------------------------------------------------------------
 
 
 class TestChunkerExtended:
@@ -315,9 +309,7 @@ class TestChunkerExtended:
         assert len(overlap_prefix.split()) >= 2
 
 
-# ---------------------------------------------------------------------------
 # 11. FileReader -- additional coverage
-# ---------------------------------------------------------------------------
 
 
 class TestFileReaderExtended:
@@ -412,9 +404,7 @@ class TestPysqlite3Fallback:
         self._reload_without_pysqlite3("kiro_crew.snapshot")
 
 
-# ---------------------------------------------------------------------------
 # 12. chunk_markdown() -- heading-aware markdown chunking
-# ---------------------------------------------------------------------------
 
 
 class TestChunkMarkdown:
@@ -516,9 +506,7 @@ class TestChunkMarkdown:
         assert chunk["line_end"] == 4
 
 
-# ---------------------------------------------------------------------------
 # 13. FileReader -- .docx content_type metadata
-# ---------------------------------------------------------------------------
 
 
 class TestDocxContentType:
@@ -595,9 +583,7 @@ class TestCosineSimilarityDimensionMismatch:
         assert HybridRetriever._cosine_similarity([], []) == 0.0
 
 
-# ---------------------------------------------------------------------------
 # EntityExtractor -- untrusted-chunk nonce-suffixed delimiters (CWE-94)
-# ---------------------------------------------------------------------------
 
 
 class TestEntityExtractorNonceDelimiters:
