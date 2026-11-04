@@ -429,6 +429,41 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
     return result
 
 
+#: Renamed keys a reader still accepts, per section: each canonical key and its
+#: older spellings, in the order the reader tries them
+#: (``sections_agent._read_dangerously_skip_permissions``,
+#: ``memory_sections._read_auto_add_documents``).
+_RENAMED_KEY_SPELLINGS: dict[str, dict[str, tuple[str, ...]]] = {
+    "agent": {"dangerously_skip_permissions": ("dangerouslySkipPermissions", "yolo")},
+    "knowledge": {"auto_add_documents": ("auto_ingest_doc_links",)},
+}
+
+
+def _canonical_overlay_keys(overlay: dict) -> dict:
+    """*overlay* with each older spelling of a renamed key under its current name.
+
+    ``save()`` emits only the current name, so an overlay that still uses an old
+    spelling (``agent.yolo``) never matches it in :func:`_subtract_overlay` and its
+    value is written into ``config.json``. The spelling the reader would use wins,
+    as at load; a section that already holds the current name is left alone.
+    """
+    result = dict(overlay)
+    for section, renames in _RENAMED_KEY_SPELLINGS.items():
+        body = result.get(section)
+        if not isinstance(body, dict):
+            continue
+        body = dict(body)
+        for canonical, older in renames.items():
+            if canonical in body:
+                continue
+            for spelling in older:
+                if spelling in body:
+                    body[canonical] = body[spelling]
+                    break
+        result[section] = body
+    return result
+
+
 def _subtract_overlay(merged: dict, overlay: dict) -> dict:
     """Remove leaf values from *merged* that are owned by the overlay.
 

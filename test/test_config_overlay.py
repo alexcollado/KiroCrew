@@ -221,6 +221,44 @@ class TestConfigOverlayLoad:
         assert "yolo" not in saved.get("agent", {})
         assert "model" not in saved.get("agent", {})
 
+    @pytest.mark.parametrize("spelling", ["yolo", "dangerouslySkipPermissions"])
+    def test_save_keeps_an_older_overlay_spelling_out_of_config_json(
+        self, tmp_path: Path, spelling: str
+    ) -> None:
+        config_dir = tmp_path / ".kirocrew"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(json.dumps({"agent": {"provider": "acp"}}))
+        (config_dir / "config.local.json").write_text(json.dumps({"agent": {spelling: True}}))
+
+        with patch("kiro_crew.config.loader.config_dir", return_value=config_dir):
+            cfg = KiroCrewConfig.load()
+            assert cfg.agent.dangerously_skip_permissions is True
+            cfg.save()
+            saved = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
+            (config_dir / "config.local.json").unlink()
+            reloaded = KiroCrewConfig.load()
+
+        # The overlay owns the value under its older name; config.json never gets it.
+        assert "dangerously_skip_permissions" not in saved.get("agent", {})
+        assert reloaded.agent.dangerously_skip_permissions is False
+
+    def test_save_keeps_an_older_knowledge_spelling_out_of_config_json(
+        self, tmp_path: Path
+    ) -> None:
+        config_dir = tmp_path / ".kirocrew"
+        config_dir.mkdir()
+        (config_dir / "config.json").write_text(json.dumps({"agent": {"provider": "acp"}}))
+        overlay = {"knowledge": {"auto_ingest_doc_links": True}}
+        (config_dir / "config.local.json").write_text(json.dumps(overlay))
+
+        with patch("kiro_crew.config.loader.config_dir", return_value=config_dir):
+            cfg = KiroCrewConfig.load()
+            assert cfg.knowledge.auto_add_documents is True
+            cfg.save()
+            saved = json.loads((config_dir / "config.json").read_text(encoding="utf-8"))
+
+        assert "auto_add_documents" not in saved.get("knowledge", {})
+
     def test_load_warns_when_config_json_is_non_dict(self, tmp_path: Path) -> None:
         config_dir = tmp_path / ".kirocrew"
         config_dir.mkdir()

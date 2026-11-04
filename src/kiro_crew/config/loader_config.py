@@ -70,7 +70,7 @@ from kiro_crew.config.loader_snapshots import (
     publish_config_timezone,
 )
 from kiro_crew.config.paths import config_package_dir, kiro_agents_dir
-from kiro_crew.config.resolution import _subtract_overlay
+from kiro_crew.config.resolution import _canonical_overlay_keys, _subtract_overlay
 from kiro_crew.config.sections import (
     ACTIVATION_ALWAYS,
     ACTIVATION_MENTION,
@@ -882,7 +882,8 @@ class KiroCrewConfig:
                                 k: canonical[k] for k in rl_overlay if k in canonical
                             },
                         }
-                    d = _subtract_overlay(d, raw_local)
+                    # Renamed keys compare under the name save() emits.
+                    d = _subtract_overlay(d, _canonical_overlay_keys(raw_local))
             except (json.JSONDecodeError, UnicodeDecodeError, OSError):
                 pass
         # An equal overlay value must not erase a choice the base file owns.
