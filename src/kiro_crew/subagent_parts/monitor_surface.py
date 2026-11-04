@@ -68,7 +68,6 @@ def _is_orphan_process(pid: int, spawned_at: float) -> bool:
     """
     try:
         proc_stat = os.stat(f"/proc/{pid}")
-        # Process was created before or around the time we spawned the agent
         return proc_stat.st_ctime <= spawned_at + 2.0
     except (FileNotFoundError, OSError):
         return False
@@ -77,19 +76,13 @@ def _is_orphan_process(pid: int, spawned_at: float) -> bool:
 async def _kill_orphan_pid(pid: int) -> str | None:
     """Best-effort SIGKILL of an orphaned process; returns what stopped it.
 
-    ``None`` once the process is gone -- signalled here, or already exited
-    by the time the signal went out (nothing to kill is not a failure) --
-    and otherwise the failure the kill raised (``PermissionError: …``),
-    named the way the reaper's record names one, so the caller's audit row
-    can say ``failed`` for a process the kill left standing rather than
-    ``killed`` regardless. Never raises: the caller owns a reconciliation
-    it must still finish.
+    ``None`` once the process is gone (killed here or already exited), else the
+    failure the kill raised (``PermissionError: …``), so the caller's audit row
+    can say ``failed`` rather than ``killed``. Never raises: the caller must still
+    finish its reconciliation.
 
-    The signal goes through :func:`platform_compat.kill_pid_async`: the
-    Windows kill is a ``taskkill`` spawn that waits up to five seconds for
-    the target, and the reconciliation runs on the event loop, so that wait
-    happens on the subprocess executor while the loop keeps serving; the
-    POSIX ``os.kill`` is a non-blocking syscall and runs inline.
+    Uses :func:`platform_compat.kill_pid_async` because the Windows ``taskkill``
+    waits up to five seconds, and this runs on the event loop.
     """
     try:
         await platform_compat.kill_pid_async(pid, platform_compat.SIGKILL)
@@ -158,23 +151,12 @@ def _note_tool_dispatch(info: SubagentInfo, event: Any) -> None:
     ``AcpEvent``, and keeping only ``title`` would leave stall detection
     with nothing to attribute evidence with.
 
-    The hand-off itself runs through the shared :class:`InFlightToolTracker`
-    (``dispatch``), the same rule the main agent uses: the call becomes the
-    judged one and, when it carries a toolCallId, is stored under it.
+    The hand-off runs through the shared :class:`InFlightToolTracker`
+    (``dispatch``), the same rule the main agent uses.
 
-    Retiring the oracle here (rather than clearing it) is load-bearing: a
-    movement walk still running against the PREVIOUS tool's command holds a
-    reference to the old instance, and clearing in place would let its late
-    write land on the new tool's baseline and read as movement. A dispatch
-    always changes the judged call, so the oracle is always retired.
-
-    A native child's call (``sub_session_id`` set, from a permission
-    request) is judged but takes the empty-id slot and is NOT stored by id:
-    its result goes to the backend's own session and never reaches this
-    loop, so nothing would ever pop a stored entry. A normal call is stored
-    under its toolCallId until its terminal result, so a parallel call that
-    finishes first hands the slot back to one still running instead of
-    emptying it.
+    The oracle is retired, not cleared: a movement walk still running against
+    the PREVIOUS command holds the old instance, and clearing in place would let
+    its late write land on the new tool's baseline and read as movement.
     """
     state = ToolCallState(
         title=event.title or "",
@@ -196,13 +178,11 @@ def _note_tool_dispatch(info: SubagentInfo, event: Any) -> None:
             else ""
         ),
     )
-    # A native child's call (``sub_session_id`` set, from a permission
-    # request) is judged so a stall is attributed to the child's command,
-    # but its result goes to the backend's own session and never reaches
-    # this loop — so it is NOT stored by id (nothing would ever pop it). It
-    # takes the empty-id slot, which the next dispatch overwrites. A normal
-    # call is stored under its toolCallId so a parallel call finishing first
-    # hands the judged slot back to one still running instead of emptying it.
+    # A native child's call (``sub_session_id`` set) is judged but takes the
+    # empty-id slot: its result goes to the backend's own session and never
+    # reaches this loop, so a stored entry would never be popped. A normal call is
+    # stored under its toolCallId so a parallel call finishing first hands the
+    # judged slot back to one still running.
     if getattr(event, "sub_session_id", ""):
         info._tool_tracker.dispatch("", state)
     else:
@@ -213,27 +193,15 @@ def _note_tool_dispatch(info: SubagentInfo, event: Any) -> None:
 def _note_tool_result(info: SubagentInfo, event: Any) -> None:
     """Retire a call's attribution when its TERMINAL result arrives.
 
-    The gate lives here rather than at the call site so the invariant is
-    directly testable. ``EVENT_TOOL_RESULT`` is also emitted for
-    The gate lives here rather than at the call site so the invariant is
-    directly testable. ``EVENT_TOOL_RESULT`` is also emitted for
-    non-terminal progress updates, and treating one of those as the end of
-    the tool would drop attribution while the command is still running —
-    degrading liveness to idle-time-only for exactly the long silent command
-    this detection exists to judge, and so raising the badge on a healthy
-    agent. A failed, cancelled or refused call is over as surely as a
-    completed one, which is the set ``AcpSessionHandle`` retires on too, and
-    which ``acp.client`` gates on the same way.
+    ``EVENT_TOOL_RESULT`` is also emitted for non-terminal progress updates;
+    treating one as the end would drop attribution while the long silent command
+    is still running and flag a healthy agent. Failed, cancelled and refused calls
+    are terminal too, the set ``AcpSessionHandle`` and ``acp.client`` use.
 
-    The hand-off runs through the shared :class:`InFlightToolTracker`
-    (``result``): the finished call is dropped and, when it was the judged
-    one, the slot passes to the most recently dispatched call still running,
-    so a file write returning beside a ``wait`` leaves the reaper judging the
-    wait rather than nothing. A judged native-child call is never in the
-    running set (it took the empty-id slot and was never stored), so this
-    agent's own next terminal result moves the slot off it. The oracle is
-    retired only when the judged call actually changed — the signal the
-    tracker returns.
+    Through the shared :class:`InFlightToolTracker` (``result``), a finished
+    judged call passes the slot to the most recently dispatched call still
+    running, so a file write returning beside a ``wait`` leaves the wait judged.
+    The oracle is retired only when the tracker says the judged call changed.
     """
     terminal = getattr(event, "tool_status", "") in TERMINAL_TOOL_STATUSES
     if not (event.tool_final or terminal):
@@ -258,15 +226,11 @@ def _clear_tool_dispatch(info: SubagentInfo) -> None:
 def _retire_subagent_oracle(info: SubagentInfo) -> None:
     """Retire this agent's stall oracle and bump its generation.
 
-    Called whenever the judged tool call changes (new dispatch, final
-    result, cleared snapshot). Swaps in a ``fresh()`` oracle rather than
-    clearing in place — a walk still running against the previous command
-    holds the old instance, and the generation bump lets a verdict that
-    outlived its tool be recognised as stale and discarded. The counterpart
-    of ``AcpSessionHandle._retire_liveness_state``; the two differ only in
-    the machinery each owns (a bound oracle + consult future there, a
-    generation counter here), which is why the retirement is NOT part of the
-    shared tracker — only the hand-off decision is.
+    Called whenever the judged tool call changes. Swaps in a ``fresh()`` oracle
+    rather than clearing in place, since a walk against the previous command holds
+    the old instance; the generation bump marks a verdict that outlived its tool
+    as stale. The counterpart of ``AcpSessionHandle._retire_liveness_state``; each
+    owns different machinery, so retirement is not part of the shared tracker.
     """
     oracle = info._stall_oracle
     info._stall_oracle = oracle.fresh() if oracle is not None else None
