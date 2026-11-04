@@ -550,6 +550,16 @@ _DELIVERY_SINKS: tuple[tuple[str, str, str], ...] = (
         "by segment through redact_path_segments.",
     ),
     (
+        "Files tab edited-file list",
+        "dashboard/session_files.py",
+        "The absolute paths the Files tab's Edited view (api_project_session_files) "
+        "returns are checked through _redact_project_path: a path the redactor would "
+        "change is withheld from the list rather than sent masked, and the response "
+        "says the list is incomplete. One edit's texts (api_project_session_file_diff) "
+        "are served only for a path the list would name, and they are the snapshot "
+        "texts the turn runner redacted before they were stored.",
+    ),
+    (
         "Slide-deck render screen and conversion diagnostic",
         "dashboard/handlers/office_slides.py",
         "The .pptx/.ppt slide renderer screens the deck's rendered text through "
