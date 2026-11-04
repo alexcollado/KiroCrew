@@ -39,9 +39,7 @@ from kiro_crew.work_ledger_records import (
 )
 from kiro_crew.work_vocab import work_event_id
 
-# --------------------------------------------------------------------------- #
 # Paths
-# --------------------------------------------------------------------------- #
 
 #: Directory naming is :func:`kiro_crew.session_ledger._store_name` -- readable
 #: fold plus ``sha256[:8]`` -- imported rather than copied. ``session_ledger``
@@ -190,9 +188,7 @@ def undelivered_path(worker_slot_key: str) -> Path:
     return resolved
 
 
-# --------------------------------------------------------------------------- #
 # Locks
-# --------------------------------------------------------------------------- #
 
 
 @contextmanager
@@ -240,21 +236,14 @@ def conductor_lock(slot_key: str, *, create: bool = True) -> Iterator[None]:
 def item_lock(slot_key: str, item_id: str, *, create: bool = True) -> Iterator[None]:
     """Hold one item's lock. SECOND in the lock order; see the module docstring.
 
-    ``create=False`` is the form every writer to an EXISTING item takes. A lock
-    that creates its file also ``mkdir``s the store around it, so a late report
-    against a purged ledger -- a worker whose binding outlived the conductor --
-    would rebuild ``<store>/items/<id>.lock`` in a directory the sweep had
-    removed, and a lock-only store with no header and no items is one the sweep
-    keeps forever. With ``create=False`` a missing lock file is read as the
-    missing item it is: ``CODE_UNKNOWN_ITEM``, and nothing is written. The one
-    exception is a store that still HOLDS the item record but lost its lock file
-    (hand-removed); the store exists, so the lock is recreated for it -- UNDER
-    THE CONDUCTOR LOCK, taken non-creating, with the record re-checked inside
-    the hold. The purge holds that same lock through its removal, so the store
-    cannot vanish between the re-check and the ``touch``; a plain creating open
-    here could lose that race and rebuild the lock-only store this parameter
-    exists to prevent. Only ``_create_item`` creates, and it does so under the
-    conductor lock with the header verified present.
+    ``create=False`` is the form every writer to an EXISTING item takes. A creating
+    lock also ``mkdir``s the store, so a late report against a purged ledger would
+    rebuild a lock-only store the sweep keeps forever; here a missing lock file is
+    ``CODE_UNKNOWN_ITEM`` and nothing is written. If the item record exists but its
+    lock file was hand-removed, the lock is recreated UNDER THE CONDUCTOR LOCK (taken
+    non-creating, record re-checked inside the hold); the purge holds that lock through
+    its removal, so the store cannot vanish in between. Only ``_create_item`` creates,
+    under the conductor lock with the header verified present.
     """
     path = _item_lock_path(slot_key, item_id)
     if create:
@@ -368,9 +357,7 @@ def forget_undelivered_for_item(
         logger.debug("could not drop an undelivered-call record", exc_info=True)
 
 
-# --------------------------------------------------------------------------- #
 # Whole-file reads. A corrupt record reads as absent.
-# --------------------------------------------------------------------------- #
 
 
 def _read_json_record(path: Path, *, strict: bool = False) -> Any | None:
@@ -387,16 +374,12 @@ def _read_json_record(path: Path, *, strict: bool = False) -> Any | None:
     the other writer was interrupted mid-write. The ceiling is checked before the
     read so a hand-grown file cannot be pulled into memory first.
 
-    The bytes come from ``read_bytes_with_retry`` because a strict read here is
-    LOCK-FREE across writers: :func:`_refuse_if_worker_holds_open_item` reads the
-    prior item's file under the WORKER's binding lock, while that item's own
-    conductor may be replacing it under a different item lock. On Windows a read of
-    a file another handle holds open for write raises ``PermissionError``, so one
-    correct concurrent writer is enough to turn a strict read into a bare
-    ``OSError`` — which the dashboard route maps to a transient 503 "try again"
-    instead of the permanent already-bound refusal the guard exists to raise. The
-    retry closes that window. POSIX permits the read, and there a
-    ``PermissionError`` is a genuine access fault the helper re-raises at once.
+    The bytes come from ``read_bytes_with_retry`` because a strict read is LOCK-FREE
+    across writers: :func:`_refuse_if_worker_holds_open_item` reads the prior item
+    under the WORKER's binding lock while its conductor may replace it under an item
+    lock. On Windows that read raises ``PermissionError``, which would surface as a
+    transient 503 instead of the already-bound refusal; the retry closes the window.
+    On POSIX a ``PermissionError`` is a real access fault and is re-raised at once.
     """
     try:
         if path.stat().st_size > MAX_RECORD_BYTES:
@@ -530,9 +513,7 @@ def _stored_item_ids(slot_key: str) -> list[str]:
     )
 
 
-# --------------------------------------------------------------------------- #
 # Events
-# --------------------------------------------------------------------------- #
 
 
 def event_id(ts: str, item_id: str, kind: str, text: str, *, status: str | None = None) -> str:

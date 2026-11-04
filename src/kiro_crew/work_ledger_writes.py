@@ -88,12 +88,10 @@ from kiro_crew.work_ledger_store import (
 )
 from kiro_crew.work_vocab import WORK_REASON_STATUSES, worker_statuses
 
-# --------------------------------------------------------------------------- #
 # Bindings. One file per worker, written only by a conductor's ``bind`` action, and
 # only as a whole-file replacement under that worker's binding lock -- so a
 # worker's binding moves to a new item exactly when its prior item is terminal,
 # and two conductors cannot both believe they bound it.
-# --------------------------------------------------------------------------- #
 
 
 def read_binding(worker_slot_key: str, *, strict: bool = False) -> tuple[str, str] | None:
@@ -191,9 +189,7 @@ def _write_binding(worker_slot_key: str, conductor_slot_key: str, item_id: str) 
     )
 
 
-# --------------------------------------------------------------------------- #
 # Conductor writes
-# --------------------------------------------------------------------------- #
 
 
 def ensure_conductor(
@@ -780,9 +776,7 @@ def _write_item_action(
         return {"conductor": record, "item": item, "event": event}
 
 
-# --------------------------------------------------------------------------- #
 # Worker writes
-# --------------------------------------------------------------------------- #
 
 
 def apply_worker_report(
@@ -857,9 +851,7 @@ def apply_worker_report(
         return {"item": item, "event": event}
 
 
-# --------------------------------------------------------------------------- #
 # Person writes
-# --------------------------------------------------------------------------- #
 
 
 def apply_person_steer(
