@@ -514,7 +514,9 @@ class SharedTemplateOverCeiling(Exception):
     """A crew-bound spec Kiro Crew does not own carries grants the ceiling denies."""
 
 
-def require_shared_template_within_ceiling(agent: str | None, backend: str) -> None:
+def require_shared_template_within_ceiling(
+    agent: str | None, backend: str, *, launch_name: str | None = None
+) -> None:
     """Refuse a *backend* start on a crew-bound spec Kiro Crew does not own that the
     ceiling would narrow.
 
@@ -529,6 +531,13 @@ def require_shared_template_within_ceiling(agent: str | None, backend: str) -> N
     writers govern them). A file that cannot be read, or one with a second hard link,
     is refused too: kiro-cli may read what this check could not. Raises
     :class:`SharedTemplateOverCeiling` naming the file and the remedy; reads only.
+
+    *launch_name* is the name kiro-cli is handed for *agent*. When it is a skill
+    view (a Crew-owned copy the native projection wrote, with the ceiling applied,
+    ``agent_materialization.shared_template_view``), kiro-cli reads that file and no
+    claimant of *agent*: a start the claimants would refuse then runs, provided the
+    view's own file is within the ceiling. Any other name, the authored one
+    included, is refused on its claimants alone.
     """
     from kiro_crew.acp_backends import ACP_BACKENDS_SPEC_FILE_GRANTS
 
@@ -577,12 +586,21 @@ def require_shared_template_within_ceiling(agent: str | None, backend: str) -> N
             return
         owned_names = {Path(f).stem for f in OWNED_KIRO_AGENT_FILES}
         over = _claimants_over_ceiling(names | {agent}, agent_state.all_fork_info(), owned_names)
+        if over and _is_skill_view_name(launch_name):
+            assert launch_name is not None
+            over = _view_over_ceiling(agent, launch_name)
     except Exception as exc:
         # Fail closed: an unread binding or lineage may be the one this start runs.
         raise SharedTemplateOverCeiling(
             f"agent {agent!r}: its spec could not be checked against the governance "
             f"ceiling ({exc}); the session was not started"
         ) from exc
+    if over and _is_skill_view_name(launch_name):
+        raise SharedTemplateOverCeiling(
+            f"agent {agent!r}: its kiro-cli skill view {launch_name} still grants tools "
+            "the governance ceiling denies, so the session was not started. Try again; "
+            "if it keeps failing, restart the gateway so the view is rebuilt."
+        )
     if over:
         files = ", ".join(str(path) for path in sorted(over)) or "its spec"
         raise SharedTemplateOverCeiling(
@@ -591,6 +609,37 @@ def require_shared_template_within_ceiling(agent: str | None, backend: str) -> N
             "from its allowedTools or autoApprove, or start the session on KAS, whose "
             "projection filters them."
         )
+
+
+def _is_skill_view_name(name: object) -> bool:
+    """Whether *name* is a skill view's name (``acp.skill_projection``), not an agent's."""
+    from kiro_crew.agent_spec_format import NATIVE_SKILL_ALIAS_PREFIX
+
+    return isinstance(name, str) and name.startswith(NATIVE_SKILL_ALIAS_PREFIX)
+
+
+def _view_over_ceiling(agent: str, view_name: str) -> "frozenset[Path]":
+    """The skill view *view_name*'s file, when the ceiling would narrow it or it cannot be read.
+
+    The view is the one file kiro-cli reads for *agent* when handed *view_name*, and it
+    sits in the agents directory, so it gets the same fenced read and the same passes
+    as any claimant (:func:`_read_for_pass`, :func:`_apply_governance_passes`). A view
+    that is absent or does not parse is refused too: nothing proves what it grants.
+    """
+    agents_dir = agent_mod.kiro_agents_dir_path()
+    path = agents_dir / f"{view_name}.json"
+    raw, _unknown = _read_for_pass(path, agents_dir)
+    if raw is None:
+        return frozenset({path})
+    try:
+        doc = user_json.loads_user_json(raw.decode("utf-8", errors="replace"))
+    except ValueError:
+        return frozenset({path})
+    if not isinstance(doc, dict):
+        return frozenset({path})
+    after = copy.deepcopy(doc)
+    _apply_governance_passes(after, source=f"shared-template-check:{agent}", audit=False)
+    return frozenset({path}) if _spec_grants(doc) - _spec_grants(after) else frozenset()
 
 
 def _bindings_may_be_incomplete(cfg: object) -> bool:

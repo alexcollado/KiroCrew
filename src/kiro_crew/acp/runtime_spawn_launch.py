@@ -406,6 +406,30 @@ async def _initialize_handshake(
         ) from exc
 
 
+async def _refuse_over_ceiling_launch(self: AcpRuntime, argv: list[str]) -> None:
+    """Refuse a kiro-cli spawn whose ``--agent`` would carry grants the ceiling denies.
+
+    kiro-cli honours the grants of the spec it is handed before Crew's gate, and Crew
+    never rewrites a crew-bound spec it does not own. The name in *argv* is what
+    kiro-cli reads: a skill view, a Crew-owned copy the projection wrote with the
+    ceiling applied (``agent_materialization.shared_template_view``), or, with no
+    view, the authored name, whose every claimant is checked. Judged here, after the
+    projection, because the plan is built before it and cannot know the name.
+    """
+    from kiro_crew import agent as agent_mod
+
+    launch_name = argv[argv.index("--agent") + 1] if "--agent" in argv[:-1] else None
+    try:
+        await asyncio.to_thread(
+            agent_mod.require_shared_template_within_ceiling,
+            self._agent,
+            ACP_BACKEND_KIRO,
+            launch_name=launch_name,
+        )
+    except agent_mod.SharedTemplateOverCeiling as exc:
+        raise AcpRuntimeError(str(exc)) from exc
+
+
 async def _spawn_admitted(self: AcpRuntime) -> None:
     """Spawn and initialize after the caller has acquired cold-start admission."""
     if self._process is not None:
@@ -575,6 +599,8 @@ async def _spawn_admitted(self: AcpRuntime) -> None:
                                     )
     except _KiroExecutableTrustError as exc:
         raise AcpRuntimeError(str(exc)) from exc
+    if self.acp_backend == ACP_BACKEND_KIRO:
+        await _refuse_over_ceiling_launch(self, argv)
     # Who confines this process, decided from the plan because the route is the
     # plan's: KAS's relay runs kiro-cli and its internal sandbox, its bundle runs
     # Node and does not. Every reader below takes this one answer.
