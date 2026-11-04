@@ -533,6 +533,14 @@ async def api_connections_mint(request: web.Request) -> web.Response:
             slug=slug,
         )
 
+    from kiro_crew.connections import crew_oauth
+
+    if await asyncio.to_thread(crew_oauth.manages, slug):
+        # ``connections.crew_oauth``: the gateway runs the sign-in itself and keeps
+        # the tokens in the vault; the card polls the same mint row as before.
+        token = await crew_oauth.start_mint_row(slug)
+        return web.json_response({"ok": True, "slug": slug, "state": "minting", "token": token})
+
     # Function-local by DESIGN, not for a cycle: this handlers package is imported
     # on the gateway boot path, and the warm engine drags in the ACP runtime and
     # the MCP inventory. Keeping it here is what stops a gateway start paying for
@@ -693,6 +701,16 @@ async def api_connections_test(request: web.Request) -> web.Response:
         return parsed
     _body, provider = parsed
     slug = str(provider["slug"])
+    from kiro_crew.connections import crew_oauth
+
+    if await asyncio.to_thread(crew_oauth.manages, slug):
+        # Test enumerates through kiro-cli's own grant, which a Crew-held sign-in
+        # does not create; a KAS chat is where this Connection is used.
+        return _conflict(
+            "Kiro Crew holds this sign-in; try the Connection from a chat instead",
+            "crew_oauth_test_unsupported",
+            slug=slug,
+        )
 
     global _testing_slug
     async with _TEST_SLUG_GUARD:
@@ -847,6 +865,24 @@ async def api_connections_disconnect(request: web.Request) -> web.Response:
     # A pending mint for this provider is now moot, and leaving it live would let
     # a grant arrive moments after the user asked for the connection to be gone.
     await cancel_mint(slug, None)
+    from kiro_crew.connections import crew_oauth
+
+    crew_result: dict[str, bool] | None = None
+    # Whatever the flag says now: a pair stored while it was on must still go, and
+    # a vault that cannot be read (None) is tried rather than assumed empty.
+    if await asyncio.to_thread(crew_oauth.manages, slug) or (
+        await asyncio.to_thread(crew_oauth.holds_grant, slug) is not False
+    ):
+        # Crew may hold this grant: revoke it upstream, delete the vault entry,
+        # and cut every live bridge for it.
+        from kiro_crew.connections import crew_oauth_proxy
+
+        crew_oauth_proxy.drop_slug(slug)
+        try:
+            crew_result = await crew_oauth.disconnect(slug)
+        except Exception as exc:  # noqa: BLE001 -- reported, never silently skipped
+            logger.warning("Crew-held grant cleanup failed for %s (%s)", slug, type(exc).__name__)
+            crew_result = {"removed": False, "revoked": False, "failed": True}
     # Read from slot state BEFORE the transaction and handed in, so the census and
     # the purge judge one snapshot of which checkouts are open rather than two.
     scope = await remove_provider_entry(slug, mcp_url, _open_project_dirs(request.app.get("state")))
@@ -868,7 +904,7 @@ async def api_connections_disconnect(request: web.Request) -> web.Response:
         # No `or grant_shared_with` escape: only ATTEMPTED pairs are re-stat'd,
         # so a survivor is always a failed unlink rather than a deliberate keep
         # that needs excusing.
-        outcome="partial" if surviving else "ok",
+        outcome="partial" if surviving or (crew_result or {}).get("failed") else "ok",
         source="dashboard",
         resources=(
             f"provider:{slug} artifacts_removed={len(removed)} "
@@ -877,6 +913,20 @@ async def api_connections_disconnect(request: web.Request) -> web.Response:
             f"census_incomplete={scope.census_incomplete}"
         ),
     )
+    if crew_result is not None and crew_result.get("failed"):
+        # Everything else is done; the Crew-held sign-in may still be stored and
+        # live upstream, so the card must show a failure, not a disconnect.
+        return web.json_response(
+            {
+                "error": (
+                    "Kiro Crew could not remove its stored GitHub sign-in. " "Try Disconnect again."
+                ),
+                "code": "crew_cleanup_failed",
+                "slug": slug,
+                "entryRemoved": scope.entry_removed,
+            },
+            status=502,
+        )
     return web.json_response(
         {
             "ok": True,
@@ -887,6 +937,15 @@ async def api_connections_disconnect(request: web.Request) -> web.Response:
             "grantCensusIncomplete": scope.census_incomplete,
             "grantCensusUnreadable": list(scope.census_unreadable),
             "agentSpecRewritten": scope.agent_spec_rewritten,
+            **(
+                {}
+                if crew_result is None
+                else {
+                    "crewGrantRemoved": crew_result["removed"],
+                    "upstreamRevoked": crew_result["revoked"],
+                    "crewCleanupFailed": bool(crew_result.get("failed")),
+                }
+            ),
         }
     )
 
