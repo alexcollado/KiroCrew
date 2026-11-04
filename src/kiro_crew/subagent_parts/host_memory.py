@@ -60,23 +60,15 @@ def check_memory_available(
 ) -> tuple[bool, float]:
     """Check if enough memory is available to spawn a subagent.
 
-    Reads /proc/meminfo MemAvailable with a plain ``open`` and compares
-    against *min_gb*. The read deliberately does NOT go through
-    ``hooks.safe_read_file``: that gate polices agent-supplied paths, and
-    this path is a fixed module constant that no caller overrides in
-    production, so the gate adds no protection here — while a gate refusal
-    under load would silently disable spawn back-pressure exactly when it
-    matters (the gate's refusal modes correlate with CPU contention).
-    ``platform_compat._linux_available_mib`` reads the same file the same
-    way. The ``path`` keyword is keyword-only and exists for tests only;
-    production callers always take the constant.
-    Native macOS/Windows readers handle the production path on those hosts:
-    on both, the floor compares against ``platform_compat.host_available_mib``
-    through ``_host_available_gb`` (see it for why macOS does not use the
-    looser sum the auto cap and the posture read).
-    Linux production reads also respect cgroup headroom. An explicit test path
-    always exercises the file reader. With no readable host memory or finite
-    cgroup limit, returns (True, -1.0).
+    Reads /proc/meminfo MemAvailable with a plain ``open`` and compares against
+    *min_gb*. It skips ``hooks.safe_read_file`` on purpose: the path is a fixed
+    constant, so that gate adds no protection, and its refusals under CPU load
+    would turn off spawn back-pressure exactly when it matters. ``path`` is for
+    tests only.
+    On macOS and Windows the floor compares against
+    ``platform_compat.host_available_mib`` through ``_host_available_gb``.
+    Linux reads also respect cgroup headroom. With no readable host memory or
+    finite cgroup limit, returns (True, -1.0).
     """
     if path == "/proc/meminfo" and not platform_compat.IS_LINUX:
         if platform_compat.IS_MACOS or platform_compat.IS_WINDOWS:
@@ -104,26 +96,20 @@ def check_memory_available(
     return (True, -1.0) if avail < 0 else (avail >= min_gb, round(avail, 2))
 
 
-# Process-subtree readings come from ONE shared walker,
-# :func:`platform_compat.proc_subtree_sample`. RSS, CPU and the two counts all
-# come from that single walk, which lives above both this module and
-# ``mcp_gateway.pool``, so the 256 ceiling and the sentinels cannot drift
-# between separate copies.
+# RSS, CPU and both counts come from one shared walker,
+# :func:`platform_compat.proc_subtree_sample`, also used by ``mcp_gateway.pool``,
+# so the 256 ceiling and the sentinels cannot drift between copies.
 
 
 def _proc_subtree_sample(pid: Optional[int], *, pss: bool = False) -> platform_compat.SubtreeSample:
     """One walk of *pid*'s subtree, carrying all four readings the sweep needs.
 
-    Thin adapter over :func:`platform_compat.proc_subtree_sample` that supplies
-    the needle this module counts by: ``STUB_MODULE``, the module path the
-    rewriter itself puts on the stub launch line. So ``sample.matched`` is the
-    stub count here, and the shared walker stays free of gateway vocabulary
-    while this module stays free of a second walk. ``pss`` adds the settled
-    capture's summed PSS to the same walk (costly; only while a capture is due).
+    Supplies ``STUB_MODULE`` (the module path on the stub launch line) as the
+    needle, so ``sample.matched`` is the stub count. ``pss`` adds the summed PSS
+    to the same walk (costly; only while a settled capture is due).
 
-    Blocking: reads a handful of ``/proc`` entries per process in the subtree, so
-    it belongs on an executor thread, never on the event loop (see
-    ``_reaper_loop`` -> ``_sample_live_costs``).
+    Blocking: reads ``/proc`` per process, so run it on an executor thread, never
+    on the event loop (see ``_reaper_loop`` -> ``_sample_live_costs``).
     """
     return platform_compat.proc_subtree_sample(pid, counts=True, needles=(STUB_MODULE,), pss=pss)
 
@@ -131,21 +117,14 @@ def _proc_subtree_sample(pid: Optional[int], *, pss: bool = False) -> platform_c
 def _subtree_cpu_jiffies(pid: int, *, pids: Optional[list[int]] = None) -> int:
     """Sum utime+stime across ``pid`` and its descendants (clock ticks).
 
-    Two routes, and the caller picks one by argument. WITHOUT ``pids`` it asks
-    the shared walker for the CPU reading alone, so the subtree is the one the
-    task rows describe and no ``status`` read is paid for an RSS figure the
-    caller does not use.
+    Without ``pids`` it asks the shared walker for the CPU reading alone, with no
+    ``status`` read for an unused RSS figure.
 
-    ``pids`` is that subtree when the caller has ALREADY walked it, so the tree
-    is not enumerated a second time to total the same processes -- the same
-    hand-over ``_get_rss_tree_mb`` takes, and for the same reason: nearly all of
-    the cost is the enumeration, not the per-process read. It also makes the CPU
-    figure describe exactly the set the caller's other figures describe, where
-    two enumerations could disagree (the walker stops at ``_SUBTREE_MAX_PROCS``
-    and a caller's own walk need not). This is the route the Sessions session
-    rows take, so their CPU figure spans their whole uncapped tree -- the same
-    set every other figure on those rows spans -- rather than the walker's first
-    ``_SUBTREE_MAX_PROCS`` processes.
+    ``pids`` is the subtree when the caller has already walked it (as with
+    ``_get_rss_tree_mb``): enumeration is most of the cost, and one enumeration
+    keeps CPU on the same process set as the caller's other figures. The walker
+    stops at ``_SUBTREE_MAX_PROCS``; the Sessions rows pass their own uncapped
+    walk, so their CPU spans the whole tree.
     """
     if pids is not None:
         return platform_compat.proc_cpu_jiffies_for_pids(pids)
@@ -157,26 +136,16 @@ def _attributed_count(total: Optional[int], sharers: int, previous: Optional[int
 
     Counts follow the same per-sharer split as the RSS/CPU attribution (see
     ``SubagentManager._live_shared_count``) so every attributed column on a row
-    describes the same fraction of the runtime. Two differences follow from a
-    count being a whole number:
+    describes the same fraction of the runtime. The quotient is rounded to a
+    whole process, and a nonzero total never rounds to zero: a runtime that
+    carries stubs must not report a share of 0.
 
-    * The quotient is rounded to the nearest whole process.
-    * A nonzero total never rounds down to zero. "This runtime carries stubs,
-      your share is 0" is the reading that would reproduce the original bug in a
-      new form, so the floor is 1 whenever anything was counted.
+    On an unmeasured sweep (``total is None``: the pid died, or no ``/proc``)
+    *previous* is kept rather than blanking a column mid-run, as RSS does.
 
-    Passing *previous* through on an unmeasured sweep (``total is None`` — the
-    pid died, or the platform has no ``/proc``) keeps the last good reading
-    rather than blanking a column mid-run, matching how RSS only writes when its
-    own read succeeded.
-
-    NOTE on the divisor: ``_live_shared_count`` counts SUBAGENT tenants. A
-    subagent shares its parent session's runtime whenever one is available
-    (``_create_shared_session``), and the parent session is not a subagent, so
-    with a parent co-tenant the divisor is a lower bound and a task's share is an
-    upper bound. That is the divisor RSS and CPU have always used; unifying it is
-    a separate change to numbers users already read, not a side effect of adding
-    two columns.
+    The divisor counts SUBAGENT tenants only. A subagent can share its parent
+    session's runtime (``_create_shared_session``), so then the divisor is a
+    lower bound and the share an upper bound, the same as for RSS and CPU.
     """
     if total is None:
         return previous
@@ -185,20 +154,17 @@ def _attributed_count(total: Optional[int], sharers: int, previous: Optional[int
     return max(1, round(total / sharers))
 
 
-# Legacy hard-coded concurrent cap; also the lower clamp bound for auto-sizing
-# so dynamic sizing never regresses below today's behavior.
+# Fail-safe concurrent cap, and the lower clamp bound for every computed cap.
 _LEGACY_DEFAULT_MAX = 3
 
 
 def _available_memory_gb() -> float:
     """Effective available memory (GB), dispatched per operating system.
 
-    Each OS reports "available" memory through a different, non-portable
-    interface, so the probe is a small per-platform branch. Every branch
-    returns a best-effort available-GB figure, or ``-1.0`` when this platform
-    has no probe yet / the read failed — in which case
-    ``compute_max_subagents`` falls back to the legacy default cap, and the
-    TaskRunner's ``compute_memory_sized_parallel_cap`` to its floor.
+    Each branch returns a best-effort available-GB figure, or ``-1.0`` when
+    this platform has no probe or the read failed; then
+    ``compute_max_subagents`` falls back to the legacy default cap, and
+    ``compute_memory_sized_parallel_cap`` to its floor.
 
         • Linux  — ``/proc/meminfo`` ``MemAvailable`` (via ``check_memory_available``),
                    then clamped by cgroup headroom so the tighter of a
@@ -210,10 +176,8 @@ def _available_memory_gb() -> float:
                    ``platform_compat.host_available_mib``. No cgroups.
         • other  — no probe yet → ``-1.0`` (fail open).
 
-    NOTE (adding a new OS): implement a ``_<os>_available_memory_gb()`` helper
-    returning GB or -1.0, add an ``IS_<OS>`` flag to ``platform_compat``, and
-    wire one branch below. Keep the -1.0 fail-open contract so an unmeasurable
-    host degrades to the safe legacy default rather than over-spawning.
+    A new OS branch must keep the -1.0 fail-open contract, so an unmeasurable
+    host degrades to the legacy default rather than over-spawning.
     """
     if platform_compat.IS_LINUX:
         _ok, host_gb = check_memory_available(min_gb=0.0)
@@ -234,28 +198,22 @@ def _available_memory_gb() -> float:
 def _host_available_gb() -> float:
     """``platform_compat.host_available_mib`` in GB, or ``-1.0`` when it cannot be read.
 
-    Delegates instead of calling ``GlobalMemoryStatusEx`` or the Mach counters
-    here. That shim is the single place the MiB unit and the "0 means
-    unreadable, never zero memory" contract are defined, and a second reader
-    would have to restate both to stay correct.
+    The shim is the one place the MiB unit and the "0 means unreadable, never
+    zero memory" contract are defined, so this delegates rather than reading
+    ``GlobalMemoryStatusEx`` or the Mach counters again.
 
     Readers:
 
-    * Windows, everywhere: without it the cap loses its memory term on Windows
-      entirely and falls open to ``_LEGACY_DEFAULT_MAX``, so a host with tens of
-      GB free is held to the same three concurrent sub-agents as an
-      unmeasurable one.
-    * macOS, the spawn floor only (``check_memory_available``). There the shim
-      counts free plus purgeable pages plus ``min(inactive,
-      external_page_count)``. The floor promises that
-      ``agent.spawn_min_memory_gb`` stays free AFTER a start, so it reads what a
-      new process can really take. The looser ``_macos_available_memory_gb``
-      adds speculative pages a second time (``free_count`` already holds them)
-      and counts dirty anonymous inactive pages as free; on a loaded Apple
-      silicon host it reads about 3.5 GiB above this figure, so a floor compared
-      against it admits starts with less headroom than the operator set. The
-      auto cap's memory-sized fallback, the TaskRunner's memory-sized auto value
-      and the memory posture keep reading ``_macos_available_memory_gb``.
+    * Windows, everywhere: without it the cap has no memory term on Windows and
+      falls open to ``_LEGACY_DEFAULT_MAX``.
+    * macOS, the spawn floor only (``check_memory_available``). The shim counts
+      free plus purgeable pages plus ``min(inactive, external_page_count)``:
+      what a new process can really take, which the floor needs because it
+      promises ``agent.spawn_min_memory_gb`` stays free AFTER a start. The looser
+      ``_macos_available_memory_gb`` double-counts speculative pages and counts
+      dirty anonymous inactive pages, reading about 3.5 GiB higher on a loaded
+      Apple silicon host. The auto cap's memory-sized fallback, the TaskRunner's
+      auto value and the memory posture keep reading the looser figure.
     """
     available_mib = platform_compat.host_available_mib()
     if available_mib <= 0:
@@ -266,25 +224,18 @@ def _host_available_gb() -> float:
 def _macos_vm_reclaimable_pages() -> Optional[int]:
     """Reclaimable memory in **pages** via Mach ``host_statistics64``, or ``None``.
 
-    macOS-only; validated live against ``vm_stat`` on Apple silicon (matches
-    within live-fluctuation noise). The Mach call itself lives in
-    ``platform_compat.macos_vm_statistics``, so the kernel struct is declared in
-    one place; what stays here is this caller's own composition of it.
+    macOS-only; the Mach call lives in ``platform_compat.macos_vm_statistics``.
 
     Reclaimable ≈ ``free + inactive + speculative + purgeable`` page classes:
     memory that can back a new allocation without swapping (the closest analogue
-    to Linux ``MemAvailable``). Wired/active/compressed pages are excluded.
-    Returns ``None`` on any failure (non-macOS, ``libSystem`` absent, non-zero
-    ``kern_return_t``) so the caller falls back to the legacy default.
+    to Linux ``MemAvailable``). Returns ``None`` on any failure so the caller
+    falls back to the legacy default.
 
     This sum is knowingly looser than ``platform_compat.host_available_mib``,
-    which bounds ``inactive`` by ``external_page_count`` and does not re-add
-    ``speculative`` (``free_count`` already contains it). The spawn floor does
-    not read it: it reads the tight figure (``_host_available_gb``).
-    This sum feeds the TaskRunner's memory-sized auto value, the auto
-    cap's disabled-floor fallback (``compute_memory_sized_parallel_cap``) and
-    the memory posture, figures that are documented and that operators tune
-    against.
+    which the spawn floor reads (``_host_available_gb``). It feeds the
+    TaskRunner's auto value, the auto cap's disabled-floor fallback
+    (``compute_memory_sized_parallel_cap``) and the memory posture, documented
+    figures that operators tune against.
     """
     probe = platform_compat.macos_vm_statistics()
     if probe is None:
@@ -296,13 +247,9 @@ def _macos_vm_reclaimable_pages() -> Optional[int]:
 def _macos_available_memory_gb() -> float:
     """macOS available-memory probe (GB), or ``-1.0`` on failure.
 
-    Combines the in-process Mach reclaimable-page count
-    (``_macos_vm_reclaimable_pages``) with the page size from ``os.sysconf``.
-    macOS has no ``/proc/meminfo`` and ``os.sysconf`` exposes only *total*
-    physical pages (no ``SC_AVPHYS_PAGES``), so the Mach VM statistics are the
-    only cheap, non-blocking source of *available* memory — which the sizing
-    formula needs so a memory-pressured Mac is not handed an inflated cap. Any
-    read failure returns -1.0 so the caller falls back to the legacy default.
+    Mach reclaimable pages times ``SC_PAGE_SIZE``. macOS has no
+    ``/proc/meminfo`` and ``os.sysconf`` has no ``SC_AVPHYS_PAGES``, so the Mach
+    VM statistics are the only cheap source of *available* memory.
     """
     try:
         page_size = os.sysconf("SC_PAGE_SIZE")
@@ -609,22 +556,16 @@ def compute_max_subagents(cfg: KiroCrewConfig) -> int:
     """The AUTO subagent cap (``agent.max_subagents == 0``): a high count ceiling.
 
     ``agent.subagent_auto_max`` (32 by default, never below 3) as written. It is
-    NOT sized from host memory: memory is bounded per start by the spawn floor
-    (``agent.spawn_min_memory_gb``), which prices every start at what it will
-    settle at and queues the ones that would not leave the floor free. A count
-    cap sized from the same memory on top of that floor only made a second
-    chat's subagents wait for slots the first chat's wave held while memory was
-    still free. The ceiling stands in for what the floor does not model -- the
-    LLM provider's concurrency, and fd / PID limits -- so on any 16-32 GB host
-    the floor is reached long before it.
+    NOT sized from host memory: the spawn floor (``agent.spawn_min_memory_gb``)
+    bounds memory per start, and a memory-sized count on top of it would make
+    one chat's subagents wait for slots another chat holds while memory is
+    free. The ceiling covers what the floor does not model: the LLM provider's
+    concurrency and fd / PID limits.
 
-    Where host memory cannot be read at all (no probe on this platform, or the
-    read failed) the floor fails open, so the count is the only guard left and
-    the cap falls back to the legacy 3 (``_LEGACY_DEFAULT_MAX``). A floor the
-    operator disabled (``agent.spawn_min_memory_gb <= 0``) admits every start
-    the same way, so there the count is sized from host memory instead
-    (:func:`compute_memory_sized_parallel_cap`), the bound the floor would
-    otherwise have provided.
+    When host memory cannot be read the floor fails open, so the cap falls back
+    to ``_LEGACY_DEFAULT_MAX``. When the operator disabled the floor
+    (``agent.spawn_min_memory_gb <= 0``), the count is sized from host memory
+    instead (:func:`compute_memory_sized_parallel_cap`).
 
     See ``dynamic-subagent-sizing.md``.
     """
@@ -689,14 +630,11 @@ def _host_mem_term(cfg: KiroCrewConfig, *, settled: bool = False) -> int | None:
     every slot is priced at a typical agent (median across agents of each
     agent's p50), and the heaviest agent's p90 (``heavy_peak``) is reserved
     once. By default both come from the whole-run peak ``mem_gb``, so the
-    reserve covers that agent's growth after it starts, which no per-start
-    price models. With ``settled`` they come from ``settled_gb`` instead: the
-    agent's own processes -- kiro-cli and the MCP servers up once its session
-    answered, idle -- read from dedicated runs only and aged out after
-    ``SETTLED_SAMPLE_MAX_AGE_SECS``, exactly the figure the spawn floor prices
-    a start at. A run's builds and test suites are not in it, so one 132 GB
-    whole-run sample does not hold that count at its floor; growth after start
-    is left to the buffer, as the floor leaves it.
+    reserve covers growth after start. With ``settled`` they come from
+    ``settled_gb``: the agent's idle processes once its session answered, from
+    dedicated runs aged out after ``SETTLED_SAMPLE_MAX_AGE_SECS``, the figure
+    the spawn floor prices a start at. Builds and tests are not in it, so one
+    huge whole-run sample cannot pin the count at its floor.
     """
     agent = cfg.agent
     avail_gb = _available_memory_gb()
@@ -728,11 +666,8 @@ def resolve_max_subagents(cfg: KiroCrewConfig) -> int:
     """
     configured = _configured_max_subagents(cfg)
     if configured > 0:
-        # An explicit pin below the legacy floor (1 or 2) would silently disable
-        # auto-sizing AND run below today's default; floor it to 3. 0 stays the
-        # auto sentinel. The config loader and dashboard API also enforce this;
-        # defend here so a directly-constructed config can't drop the runtime cap
-        # below the floor.
+        # Floor an explicit pin of 1 or 2 to 3. The config loader and dashboard
+        # API enforce this too; this covers a directly constructed config.
         return max(configured, _LEGACY_DEFAULT_MAX)
     return compute_max_subagents(cfg)
 

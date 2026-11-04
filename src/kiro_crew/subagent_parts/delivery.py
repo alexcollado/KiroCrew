@@ -22,28 +22,16 @@ if TYPE_CHECKING:
 def _injection_notice_outcome(info: "SubagentInfo") -> str:
     """One-sentence outcome line for the injection-failure fallback notice.
 
-    ``notify_injection_failed`` fires whenever a terminal report could not be
-    injected into the parent — for EVERY terminal state, not just successful
-    completion. Asserting "finished" for a run that was stopped or rejected
-    before it executed misdescribes the outcome, so the line branches on the
-    record's canonical :attr:`SubagentInfo.outcome` with one before-start
-    refinement per branch: ``_exec_started`` — the marker ``_run_inner`` sets
-    when execution actually begins — is ``None`` exactly when the run never
-    executed, which covers every spawn-rejection site (all of them construct
-    their record without it) with no wording contract between ``error``
-    strings and this notice. The "no result to deliver" phrasings are guarded
-    on the absence of any output so they can never contradict the result-path
-    recovery hint.
+    ``notify_injection_failed`` fires for EVERY terminal state, so the line
+    branches on :attr:`SubagentInfo.outcome` rather than asserting "finished".
+    ``_exec_started`` (set by ``_run_inner`` when execution begins) is ``None``
+    exactly when the run never executed, which covers every spawn-rejection
+    site. The "no result to deliver" phrasings require that there is no output,
+    so they never contradict the result-path recovery hint.
 
-    The completed branch names no delivery MECHANISM. Only two of the six
-    ``notify_injection_failed`` call sites pass a timeout; the rest pass
-    "provider dead after prompt-busy retries", "ACP process died", a raw
-    ``str(exception)`` and the last injection-failure reason. Since the notice
-    prints ``reason`` on the line directly above this one, asserting a timeout
-    here would contradict it — and the reader is an LLM deciding whether to
-    retry. The cause belongs to ``reason``; this line states only the outcome.
-
-    Pure function of the record, unit-tested per branch.
+    The line names no delivery MECHANISM: the notice prints the cause as
+    ``reason`` on the line above, and call sites pass many causes besides a
+    timeout, so naming one here could contradict it.
     """
     never_ran = info._exec_started is None and not info.result and not info.result_path
     outcome = info.outcome
@@ -109,21 +97,15 @@ class SpawnApprovalCallback(Protocol):
         pass
 
 
-# ── Delivery routing state: enumerated from the PRODUCING side ────────────────
+# Delivery routing state, enumerated from the producing side.
 #
-# Every ``SubagentInfo`` attribute that the modules owning terminal-outcome routing
-# WRITE -- ``subagent_manager/terminal.py``, ``subagent_manager/waves.py``,
-# ``subagent_manager/cancellation.py`` and the gateway's completion consumer
-# (``slack/gateway_runtime/subagent_wiring.py``, ``subagent_report.py``,
-# ``subagent_injection.py`` and ``runtime_charge.py``) -- classified by what it says
-# about whether the outcome has reached the parent.
+# Every ``SubagentInfo`` attribute that the ``DELIVERY_ROUTING_MODULES`` write,
+# classified by what it says about whether the outcome has reached the parent.
 #
-# The list exists because "has this run's outcome reached its parent" has more than one
-# representation, and reading only the obvious one was wrong four separate times. A
-# parent-end teardown has to suppress the delivery of a run whose parent is gone, so a
-# representation it does not know about is a delivery that lands in a conversation that
-# ended -- and the injector CREATES a session when none is live, so that delivery rebuilds
-# the conversation the teardown just took down.
+# "Has this run's outcome reached its parent" has more than one representation. A
+# parent-end teardown must suppress the delivery of a run whose parent is gone, and the
+# injector CREATES a session when none is live, so a representation the teardown misses
+# rebuilds the conversation it just took down.
 #
 # ``PARKS_WHEN_SET``  -- truthy means the outcome is parked somewhere and has not landed.
 # ``PARKS_WHEN_UNSET`` -- falsy means it has not landed; truthy means it has.
@@ -228,13 +210,10 @@ def delivery_is_parked(info: "SubagentInfo") -> bool:
     """True when this run's outcome has not reached its parent.
 
     Reads :data:`DELIVERY_ROUTING_FIELDS` rather than naming fields inline, so the
-    predicate and the classification cannot drift -- the drift is what let a parked
-    representation through on four separate rounds.
+    predicate and the classification cannot drift.
 
-    The union is deliberately conservative. Answering True for a run whose delivery has in
-    fact landed costs nothing: the gate only SKIPS an injection, and a run that already
-    delivered does not inject again. Answering False for a parked one rebuilds a retired
-    conversation.
+    Deliberately conservative: a false True only skips an injection that already
+    landed, while a false False rebuilds a retired conversation.
     """
     for field_name, rule in DELIVERY_ROUTING_FIELDS.items():
         value = getattr(info, field_name, None)
@@ -263,35 +242,24 @@ def _audit_ids(ids: "Iterable[str]", cap: int = 20) -> str:
     return ",".join(listed[:cap]) + f",+{len(listed) - cap}-more"
 
 
-# How long the delivery gate remembers a teardown-cancelled run id when nothing has
-# explicitly discarded it.
+# How long the delivery gate remembers a teardown-cancelled run id nobody discarded.
 #
-# A BACKSTOP, not the primary rule. The primary rule is that the gate keeps an id until
-# that run's delivery has actually been suppressed, which is what ``_report_terminal_impl``
-# discards on -- so the ordinary case never depends on this number. It exists for a marked
-# run that never reaches a terminal at all.
-#
-# A day rather than an hour, because an approval-parked run is deliberately NOT cancelled
-# (the approval is a person's decision to make) and a person can take far longer than an
-# hour to answer. An hour let a later teardown prune the mark while such a run was still
-# waiting, and its completion then injected into whatever the key served by then.
+# A backstop: normally ``_report_terminal_impl`` discards the id once that run's delivery
+# was suppressed. This covers a marked run that never reaches a terminal. A full day,
+# because an approval-parked run is not cancelled and a person may take hours to answer;
+# pruning its mark earlier would let its completion inject into whatever the key serves.
 _TEARDOWN_GATE_TTL_SECS = 86400.0
 
 
 class _AgingIdSet:
     """A membership set of run ids that forgets an entry once it is OLD, never when full.
 
-    Age since MARKING is the only eviction rule, and the reason is that the alternative
-    is unsafe. A CAPACITY rule evicts by arrival order regardless of whether the run
-    could still announce, so a single parent with more queued children than the capacity
-    would evict its own earliest ids while its reports were still being spawned -- and
-    those reports then walk through the gate and rebuild the conversation the teardown
-    took down. An age rule cannot do that: the TTL is chosen to exceed every window in
-    which a marked run has an announce left.
+    Age since MARKING is the only eviction rule. A capacity rule would evict a large
+    wave's earliest ids while their reports could still announce, letting them through
+    the gate; the TTL exceeds every window in which a marked run can still announce.
 
-    Age is also why the lifetime is not tied to the run's ``_agents`` record. That record
-    is popped while a run is still tearing down (a dashboard "clear completed" does it),
-    so discarding on the pop would disarm the gate while the run can still announce --
+    The lifetime is not tied to the run's ``_agents`` record either: that record can be
+    popped while the run is still tearing down (a dashboard "clear completed" does it),
     the same reason ``_teardown_gates`` outlives those records.
 
     Not an LRU: a read must not extend an entry's life, or a hot gate check on one id
